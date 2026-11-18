@@ -14,9 +14,11 @@
     input, select, button, textarea { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
     .card { background: #f9f9f9; padding: 15px; margin-top: 15px; border-radius: 8px; border: 1px solid #ddd; }
     .chart-container { position: relative; width: 100%; margin-top: 25px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #eee; }
-    table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
     th, td { border: 1px solid #ddd; padding: 6px; text-align: center; }
     th { background: #f1f1f1; }
+    details { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 10px 15px; margin-top: 15px; }
+    summary { font-weight: bold; cursor: pointer; font-size: 15px; color: #333; }
     button.delete-btn { background: #ff4d4d; color: white; border: none; padding: 4px 8px; cursor: pointer; border-radius: 4px; width: auto; }
     button.delete-btn:hover { background: #cc0000; }
     button.edit-btn { background: #ffc107; color: #333; border: none; padding: 4px 8px; cursor: pointer; border-radius: 4px; width: auto; margin-right: 2px; }
@@ -116,22 +118,45 @@
     <canvas id="chartYear"></canvas>
   </div>
 
-  <h3>History Log</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Weight</th>
-        <th>Items Eaten</th>
-        <th>Consumed</th>
-        <th>Burned</th>
-        <th>Proj. Change</th>
-        <th>Actual Change</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody id="historyTableBody"></tbody>
-  </table>
+  <!-- Collapsible Section 1: Current Day Food Log -->
+  <details open>
+    <summary>🥗 Current Day Food Log (<span id="currentDateHeader">--</span>)</summary>
+    <div style="margin-top: 10px;">
+      <p style="font-size: 13px; color: #555; margin-bottom: 5px;">Total Consumed Today: <b id="todayTotalCals">0</b> cals</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Meal</th>
+            <th>Food Item</th>
+            <th>Calories</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="todayFoodTableBody"></tbody>
+      </table>
+    </div>
+  </details>
+
+  <!-- Collapsible Section 2: Weight & Calorie History Log (Past Week / All Time) -->
+  <details open>
+    <summary>📋 Weight & History Log (Past Week & All-Time)</summary>
+    <div style="margin-top: 10px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Weight</th>
+            <th>Consumed</th>
+            <th>Burned</th>
+            <th>Proj. Change</th>
+            <th>Actual Change</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="historyTableBody"></tbody>
+      </table>
+    </div>
+  </details>
 
   <!-- OCR Correction & Portion Modal -->
   <div id="ocrModal">
@@ -279,7 +304,8 @@
     }
 
     function init() {
-      document.getElementById('date').valueAsDate = new Date();
+      const todayStr = new Date().toISOString().split('T')[0];
+      document.getElementById('date').value = todayStr;
       initCharts();
       renderAll();
     }
@@ -319,7 +345,6 @@
       if (item) {
         if (!existing.items) existing.items = [];
         existing.items.push(item);
-        // Recalculate total consumed calories from items
         existing.calories = existing.items.reduce((sum, i) => sum + i.calories, 0);
       } else if (!existing.items || existing.items.length === 0) {
         existing.calories = 2200;
@@ -333,7 +358,6 @@
       document.getElementById('foodCalories').value = '';
       document.getElementById('weight').value = '';
       document.getElementById('caloriesBurned').value = '';
-      document.getElementById('date').valueAsDate = new Date();
     }
 
     function editEntry(index) {
@@ -538,7 +562,11 @@
       sortEntries();
       
       let projectedWeights = [];
-      let tableHtml = '';
+      let historyTableHtml = '';
+      let todayFoodTableHtml = '';
+
+      const selectedDate = document.getElementById('date').value;
+      document.getElementById('currentDateHeader').innerText = formatDateDisplay(selectedDate);
 
       entries.forEach((entry, idx) => {
         if (!entry.caloriesBurned || entry.caloriesBurned === 0) {
@@ -557,6 +585,7 @@
         projectedWeights.push(proj4Wk !== null ? parseFloat(proj4Wk.toFixed(1)) : null);
       });
 
+      // Render History Log (Past Week & All Time)
       for (let idx = entries.length - 1; idx >= 0; idx--) {
         let entry = entries[idx];
         let netCal = entry.calories - entry.caloriesBurned;
@@ -578,14 +607,9 @@
           }
         }
 
-        let itemsHtml = entry.items.map((item, iIdx) => 
-          `<span class="item-tag"><b>[${item.meal}]</b> ${item.name}: ${item.calories}cal <a href="javascript:void(0)" onclick="deleteItem(${idx}, ${iIdx})" style="color:red; text-decoration:none;">×</a></span>`
-        ).join('<br>');
-
-        tableHtml += `<tr>
+        historyTableHtml += `<tr>
           <td>${formatDateDisplay(entry.date)}</td>
           <td>${entry.weight !== null ? entry.weight : '--'}</td>
-          <td style="text-align: left; max-width: 200px;">${itemsHtml || '<i>No items logged</i>'}</td>
           <td>${entry.calories}</td>
           <td>${entry.caloriesBurned}</td>
           <td style="color: ${dailyProjChange < 0 ? 'green' : (dailyProjChange > 0 ? 'red' : 'inherit')}">${projStr} lbs</td>
@@ -596,6 +620,25 @@
           </td>
         </tr>`;
       }
+
+      // Render Current Day Food Log Table
+      let todayEntry = entries.find(e => e.date === selectedDate);
+      let todayTotalCals = 0;
+      if (todayEntry && todayEntry.items && todayEntry.items.length > 0) {
+        todayEntry.items.forEach((item, iIdx) => {
+          todayTotalCals += item.calories;
+          todayFoodTableHtml += `<tr>
+            <td><b>${item.meal}</b></td>
+            <td>${item.name}</td>
+            <td>${item.calories} cals</td>
+            <td><button class="delete-btn" onclick="deleteItem(${entries.indexOf(todayEntry)}, ${iIdx})">Delete</button></td>
+          </tr>`;
+        });
+      } else {
+        todayFoodTableHtml = `<tr><td colspan="4" style="color: #775555;"><i>No food items logged for this date yet.</i></td></tr>`;
+      }
+      document.getElementById('todayTotalCals').innerText = todayTotalCals;
+      document.getElementById('todayFoodTableBody').innerHTML = todayFoodTableHtml;
 
       function updateChartWithContinuousProjections(chartInstance, filteredEntries) {
         let labels = [];
@@ -635,7 +678,7 @@
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
       updateChartWithContinuousProjections(chartMonth, entries.filter(e => new Date(e.date) >= oneMonthAgo));
 
-      document.getElementById('historyTableBody').innerHTML = tableHtml;
+      document.getElementById('historyTableBody').innerHTML = historyTableHtml;
 
       if (entries.length > 0) {
         document.getElementById('statsCard').style.display = 'block';
@@ -672,6 +715,9 @@
       let windowPounds = (totalNet / 3500); 
       return windowPounds >= 0 ? `+${windowPounds.toFixed(2)}` : windowPounds.toFixed(2);
     }
+
+    // Update food log view when date picker changes
+    document.getElementById('date').addEventListener('change', renderAll);
 
     window.onload = init;
   </script>
