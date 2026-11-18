@@ -9,6 +9,7 @@
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
     input, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
     .card { background: #f9f9f9; padding: 15px; margin-top: 15px; border-radius: 8px; border: 1px solid #ddd; }
+    .import-section { background: #eef6ff; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #bthe; }
     table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
     th { background: #f1f1f1; }
@@ -18,6 +19,12 @@
 </head>
 <body>
   <h2>Weight & Calorie Tracker</h2>
+
+  <!-- CSV Import Box -->
+  <div class="card" style="background: #f0f7ff;">
+    <h3>Import Renpho CSV</h3>
+    <input type="file" id="csvFile" accept=".csv" onchange="importRenphoCSV(event)">
+  </div>
   
   <label>Date:</label>
   <input type="date" id="date">
@@ -56,14 +63,13 @@
         <th>Burned</th>
         <th>Action</th>
       </tr>
-    chauffeur
-      <tbody id="historyTableBody"></tbody>
+    </thead>
+    <tbody id="historyTableBody"></tbody>
   </table>
 
   <script>
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
     
-    // Sort entries chronologically by date
     function sortEntries() {
       entries.sort((a, b) => new Date(a.date) - new Date(b.date));
     }
@@ -96,20 +102,16 @@
         return;
       }
 
-      // Default consumption to 2200 if blank
       calories = calories === "" ? 2200 : parseFloat(calories);
       caloriesBurned = caloriesBurned === "" ? 0 : parseFloat(caloriesBurned);
 
-      // Remove any existing entry for the same date to avoid duplicates, then push
       entries = entries.filter(e => e.date !== date);
       entries.push({ date, weight, calories, caloriesBurned });
       
       sortEntries();
       localStorage.setItem('weightData', JSON.stringify(entries));
-      
       renderAll();
       
-      // Clear inputs
       document.getElementById('weight').value = '';
       document.getElementById('calories').value = '';
       document.getElementById('caloriesBurned').value = '';
@@ -122,6 +124,51 @@
       renderAll();
     }
 
+    // Function to parse Renpho CSV export files
+    function importRenphoCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const text = e.target.result;
+        const lines = text.split('\n');
+        
+        let addedCount = 0;
+        // Skip header row if present, parse lines
+        for (let i = 1; i < lines.length; i++) {
+          let line = lines[i].trim();
+          if (!line) continue;
+          let cols = line.split(',');
+          
+          // Assuming typical Renpho export layout (Date/Time, Weight)
+          // Adjust column index if Renpho's format varies slightly for your export
+          let dateStr = cols[0] ? cols[0].trim().split(' ')[0] : null; 
+          let weightVal = parseFloat(cols[1]);
+
+          if (dateStr && !isNaN(weightVal)) {
+            // Check if entry already exists, otherwise add with defaults
+            let existing = entries.find(e => e.date === dateStr);
+            if (!existing) {
+              entries.push({
+                date: dateStr,
+                weight: weightVal,
+                calories: 2200,
+                caloriesBurned: 0
+              });
+              addedCount++;
+            }
+          }
+        }
+
+        sortEntries();
+        localStorage.setItem('weightData', JSON.stringify(entries));
+        renderAll();
+        alert(`Successfully imported ${addedCount} weight entries from Renpho!`);
+      };
+      reader.readAsText(file);
+    }
+
     function renderAll() {
       sortEntries();
       
@@ -132,21 +179,16 @@
       let tableHtml = '';
 
       entries.forEach((entry, idx) => {
-        // Calculate average net calorie deficit/surplus up to this entry
         let totalNetCal = 0;
         for (let i = 0; i <= idx; i++) {
           let net = entries[i].calories - entries[i].caloriesBurned;
           totalNetCal += net;
         }
         let avgDailyNet = totalNetCal / (idx + 1);
-        
-        // 4 weeks (28 days) projection based on average daily net balance
-        // 3500 kcal = 1 lb of fat
         let weeklyRate = (avgDailyNet / 3500) * 7;
         let proj4Wk = entry.weight + (weeklyRate * 4);
         projectedWeights.push(parseFloat(proj4Wk.toFixed(1)));
 
-        // Table population
         tableHtml += `<tr>
           <td>${entry.date}</td>
           <td>${entry.weight}</td>
@@ -160,14 +202,11 @@
       chart.update();
       document.getElementById('historyTableBody').innerHTML = tableHtml;
 
-      // Update analytics stats based on the latest entry
       if (entries.length > 0) {
         document.getElementById('statsCard').style.display = 'block';
-        const latest = entries[entries.length - 1];
         const latestProj = projectedWeights[projectedWeights.length - 1];
         document.getElementById('proj4Weeks').innerText = latestProj;
 
-        // Time window calculations (1 day, 3 days, 7 days, 30 days)
         document.getElementById('change1Day').innerText = getWindowChange(1);
         document.getElementById('change3Days').innerText = getWindowChange(3);
         document.getElementById('change1Week').innerText = getWindowChange(7);
@@ -194,9 +233,6 @@
       });
 
       if (count === 0) totalNet = entries[entries.length - 1].calories - entries[entries.length - 1].caloriesBurned;
-      
-      let totalPoundsChange = (totalNet / 3500) * (days); 
-      // Approximate cumulative effect over the window period length scaled linearly
       let windowPounds = (totalNet / 3500); 
       return windowPounds >= 0 ? `+${windowPounds.toFixed(2)}` : windowPounds.toFixed(2);
     }
@@ -205,4 +241,3 @@
   </script>
 </body>
 </html>
-
