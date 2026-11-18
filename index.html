@@ -11,7 +11,8 @@
   
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    input, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
+    input, textarea, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
+    textarea { height: 100px; font-family: monospace; font-size: 12px; }
     .card { background: #f9f9f9; padding: 15px; margin-top: 15px; border-radius: 8px; border: 1px solid #ddd; }
     .chart-container { position: relative; width: 100%; margin-top: 20px; }
     table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
@@ -31,11 +32,12 @@
 <body>
   <h2>Weight & Calorie Tracker</h2>
 
-  <!-- CSV Import Box -->
+  <!-- CSV Paste Box (Mobile Friendly) -->
   <div class="card" style="background: #f0f7ff;">
-    <h3 style="margin-top:0;">Import Renpho CSV</h3>
-    <input type="file" id="csvFile" accept=".csv">
-    <button class="primary-btn" onclick="handleImportClick()">Import Selected CSV</button>
+    <h3 style="margin-top:0;">Import Renpho Data</h3>
+    <p style="font-size: 13px; color: #555; margin-bottom: 5px;">Open your Renpho CSV file, copy all rows (including headers like <code>Date Time, Weight(lb)</code>), and paste them below:</p>
+    <textarea id="csvPasteArea" placeholder="Date Time,Weight(lb)&#10;2025-11-17 08:00:00,165.4"></textarea>
+    <button class="primary-btn" onclick="handlePasteImport()">Process & Import Data</button>
     <div id="importStatus"></div>
     <button class="danger-outline" onclick="clearAllData()">Clear All Stored Entries</button>
   </div>
@@ -50,4 +52,330 @@
   <input type="number" id="calories" placeholder="Defaults to 2200 if blank">
 
   <label>Calories Burned (optional):</label>
-  <input type="number
+  <input type="number" id="caloriesBurned" placeholder="e.g., 2000">
+
+  <button onclick="addData()">Add Entry</button>
+
+  <div class="card" id="statsCard" style="display:none;">
+    <h3>Trend Analysis (Based on Latest Log)</h3>
+    <p><strong>Expected Weight in 4 Weeks:</strong> <span id="proj4Weeks">--</span> lbs</p>
+    <ul>
+      <li><strong>Today's Est. Change:</strong> <span id="change1Day">--</span> lbs</li>
+      <li><strong>Past 3 Days Est. Change:</strong> <span id="change3Days">--</span> lbs</li>
+      <li><strong>Past Week Est. Change:</strong> <span id="change1Week">--</span> lbs</li>
+      <li><strong>Past Month Est. Change:</strong> <span id="change1Month">--</span> lbs</li>
+    </ul>
+  </div>
+
+  <div class="chart-container">
+    <canvas id="chart"></canvas>
+    <button class="secondary-btn" onclick="resetZoom()">Reset Chart Zoom</button>
+  </div>
+
+  <h3>History Log</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Weight</th>
+        <th>Consumed</th>
+        <th>Burned</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody id="historyTableBody"></tbody>
+  </table>
+
+  <script>
+    let entries = JSON.parse(localStorage.getItem('weightData')) || [];
+    
+    function sortEntries() {
+      entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+
+    function showStatus(message, type = 'info') {
+      const statusEl = document.getElementById('importStatus');
+      statusEl.style.display = 'block';
+      statusEl.innerText = message;
+      if (type === 'success') {
+        statusEl.style.background = '#d4edda';
+        statusEl.style.color = '#155724';
+      } else if (type === 'error') {
+        statusEl.style.background = '#f8d7da';
+        statusEl.style.color = '#721c24';
+      } else {
+        statusEl.style.background = '#e2e3e5';
+        statusEl.style.color = '#383d41';
+      }
+    }
+
+    function formatDateDisplay(dateStr) {
+      if (!dateStr) return '';
+      const parts = dateStr.split('-');
+      if (parts.length !== 3) return dateStr;
+      
+      const year = parts[0];
+      const monthIndex = parseInt(parts[1], 10) - 1;
+      const day = parts[2].padStart(2, '0');
+
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const mmm = months[monthIndex] || "Jan";
+      const yy = year.slice(-2);
+
+      return `${mmm}-${day}-${yy}`;
+    }
+
+    function parseRenphoDateTime(rawStr) {
+      if (!rawStr) return '';
+      let clean = rawStr.trim().replace(/^"|"$/g, '');
+
+      let ymdMatch = clean.match(/^(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+      if (ymdMatch) {
+        return `${ymdMatch[1]}-${ymdMatch[2].padStart(2, '0')}-${ymdMatch[3].padStart(2, '0')}`;
+      }
+
+      let mdyMatch = clean.match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})/);
+      if (mdyMatch) {
+        return `${mdyMatch[3]}-${mdyMatch[1].padStart(2, '0')}-${mdyMatch[2].padStart(2, '0')}`;
+      }
+
+      let parsed = new Date(clean);
+      if (!isNaN(parsed.getTime())) {
+        let y = parsed.getFullYear();
+        let m = String(parsed.getMonth() + 1).padStart(2, '0');
+        let d = String(parsed.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+
+      return '';
+    }
+
+    function splitCSVLine(line, delimiter = ',') {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === delimiter && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    }
+
+    const ctx = document.getElementById('chart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          { label: 'Actual Weight', data: [], borderColor: 'blue', fill: false },
+          { label: '4-Week Proj. Weight', data: [], borderColor: 'red', borderDash: [5, 5], fill: false }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          zoom: {
+            zoom: {
+              wheel: { enabled: true },
+              pinch: { enabled: true },
+              mode: 'xy',
+            },
+            pan: {
+              enabled: true,
+              mode: 'xy',
+            }
+          }
+        }
+      }
+    });
+
+    function resetZoom() {
+      chart.resetZoom();
+    }
+
+    function clearAllData() {
+      if (confirm("Are you sure you want to delete all logged entries?")) {
+        entries = [];
+        localStorage.removeItem('weightData');
+        renderAll();
+        showStatus("All entries cleared.", "info");
+      }
+    }
+
+    function init() {
+      document.getElementById('date').valueAsDate = new Date();
+      renderAll();
+    }
+
+    function addData() {
+      const date = document.getElementById('date').value;
+      const weight = parseFloat(document.getElementById('weight').value);
+      let calories = document.getElementById('calories').value;
+      let caloriesBurned = document.getElementById('caloriesBurned').value;
+
+      if (!date || isNaN(weight)) {
+        alert("Please enter a valid date and weight.");
+        return;
+      }
+
+      calories = calories === "" ? 2200 : parseFloat(calories);
+      caloriesBurned = caloriesBurned === "" ? 0 : parseFloat(caloriesBurned);
+
+      entries = entries.filter(e => e.date !== date);
+      entries.push({ date, weight, calories, caloriesBurned });
+      
+      sortEntries();
+      localStorage.setItem('weightData', JSON.stringify(entries));
+      renderAll();
+      
+      document.getElementById('weight').value = '';
+      document.getElementById('calories').value = '';
+      document.getElementById('caloriesBurned').value = '';
+    }
+
+    function deleteEntry(index) {
+      entries.splice(index, 1);
+      sortEntries();
+      localStorage.setItem('weightData', JSON.stringify(entries));
+      renderAll();
+    }
+
+    function handlePasteImport() {
+      const pasteText = document.getElementById('csvPasteArea').value;
+      if (!pasteText.trim()) {
+        showStatus("Please paste your CSV data into the box first.", "error");
+        return;
+      }
+
+      try {
+        const lines = pasteText.split(/\r?\n/).filter(l => l.trim() !== '');
+        if (lines.length < 2) {
+          showStatus("The pasted text appears to be empty or missing rows.", "error");
+          return;
+        }
+
+        const headerLine = lines[0];
+        const delimiter = headerLine.includes(';') ? ';' : (headerLine.includes('\t') ? '\t' : ',');
+        const headers = splitCSVLine(headerLine, delimiter).map(h => h.toLowerCase().replace(/\s+/g, ' ').trim());
+        
+        let dateIdx = headers.findIndex(h => h === 'date time' || h.includes('date') || h.includes('time'));
+        let weightIdx = headers.findIndex(h => h === 'weight(lb)' || h.includes('weight'));
+
+        if (dateIdx === -1) dateIdx = 0;
+        if (weightIdx === -1) weightIdx = 1;
+
+        let addedCount = 0;
+        for (let i = 1; i < lines.length; i++) {
+          const cols = splitCSVLine(lines[i], delimiter);
+          if (cols.length <= Math.max(dateIdx, weightIdx)) continue;
+
+          const standardizedDate = parseRenphoDateTime(cols[dateIdx]);
+          const rawWeight = cols[weightIdx].replace(/[^0-9.]/g, '');
+          const weightVal = parseFloat(rawWeight);
+
+          if (standardizedDate && !isNaN(weightVal) && weightVal > 0) {
+            let existing = entries.find(e => e.date === standardizedDate);
+            if (!existing) {
+              entries.push({
+                date: standardizedDate,
+                weight: weightVal,
+                calories: 2200,
+                caloriesBurned: 0
+              });
+              addedCount++;
+            } else {
+              existing.weight = weightVal;
+            }
+          }
+        }
+
+        sortEntries();
+        localStorage.setItem('weightData', JSON.stringify(entries));
+        renderAll();
+        document.getElementById('csvPasteArea.value') = '';
+        showStatus(`Success! Imported or updated ${addedCount} entries.`, "success");
+      } catch (err) {
+        showStatus("Error parsing data: " + err.message, "error");
+      }
+    }
+
+    function renderAll() {
+      sortEntries();
+      
+      chart.data.labels = entries.map(e => formatDateDisplay(e.date));
+      chart.data.datasets[0].data = entries.map(e => e.weight);
+
+      let projectedWeights = [];
+      let tableHtml = '';
+
+      entries.forEach((entry, idx) => {
+        let totalNetCal = 0;
+        for (let i = 0; i <= idx; i++) {
+          let net = entries[i].calories - entries[i].caloriesBurned;
+          totalNetCal += net;
+        }
+        let avgDailyNet = totalNetCal / (idx + 1);
+        let weeklyRate = (avgDailyNet / 3500) * 7;
+        let proj4Wk = entry.weight + (weeklyRate * 4);
+        projectedWeights.push(parseFloat(proj4Wk.toFixed(1)));
+
+        tableHtml += `<tr>
+          <td>${formatDateDisplay(entry.date)}</td>
+          <td>${entry.weight}</td>
+          <td>${entry.calories}</td>
+          <td>${entry.caloriesBurned}</td>
+          <td><button class="delete-btn" onclick="deleteEntry(${idx})">Delete</button></td>
+        </tr>`;
+      });
+
+      chart.data.datasets[1].data = projectedWeights;
+      chart.update();
+      document.getElementById('historyTableBody').innerHTML = tableHtml;
+
+      if (entries.length > 0) {
+        document.getElementById('statsCard').style.display = 'block';
+        const latestProj = projectedWeights[projectedWeights.length - 1];
+        document.getElementById('proj4Weeks').innerText = latestProj;
+
+        document.getElementById('change1Day').innerText = getWindowChange(1);
+        document.getElementById('change3Days').innerText = getWindowChange(3);
+        document.getElementById('change1Week').innerText = getWindowChange(7);
+        document.getElementById('change1Month').innerText = getWindowChange(30);
+      } else {
+        document.getElementById('statsCard').style.display = 'none';
+      }
+    }
+
+    function getWindowChange(days) {
+      if (entries.length === 0) return "0.0";
+      let latestDate = new Date(entries[entries.length - 1].date);
+      let totalNet = 0;
+      let count = 0;
+
+      entries.forEach(e => {
+        let eDate = new Date(e.date);
+        let diffTime = latestDate - eDate;
+        let diffDays = diffTime / (1000 * 3600 * 24);
+        if (diffDays >= 0 && diffDays < days) {
+          totalNet += (e.calories - e.caloriesBurned);
+          count++;
+        }
+      });
+
+      if (count === 0) totalNet = entries[entries.length - 1].calories - entries[entries.length - 1].caloriesBurned;
+      let windowPounds = (totalNet / 3500); 
+      return windowPounds >= 0 ? `+${windowPounds.toFixed(2)}` : windowPounds.toFixed(2);
+    }
+
+    init();
+  </script>
+</body>
+</html>
