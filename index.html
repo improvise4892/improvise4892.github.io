@@ -6,8 +6,6 @@
   <title>Weight & Calorie Tracker</title>
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- Tesseract.js for In-Browser OCR -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 650px; margin: auto; }
@@ -29,12 +27,13 @@
     button.primary-btn:hover { background: #0056b3; }
     button.danger-outline { background: white; color: #cc0000; border: 1px solid #cc0000; margin-top: 8px; cursor: pointer; }
     button.danger-outline:hover { background: #fff0f0; }
-    #importStatus, #ocrStatus { font-size: 14px; margin-top: 8px; font-weight: bold; padding: 6px; border-radius: 4px; display: none; }
+    #importStatus, #scannerStatus, #dbStatus { font-size: 14px; margin-top: 8px; font-weight: bold; padding: 6px; border-radius: 4px; display: none; }
     
-    #ocrModal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
+    #scannerModal, #dbModal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); }
     .modal-content { background: #fff; margin: 10% auto; padding: 20px; width: 90%; max-width: 500px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+    .search-result-item { background: #f1f1f1; padding: 8px; margin: 4px 0; border-radius: 4px; cursor: pointer; font-size: 13px; text-align: left; }
+    .search-result-item:hover { background: #e2e6ea; }
     h3.chart-title { margin-bottom: 5px; font-size: 16px; color: #333; }
-    .item-tag { display: inline-block; background: #e2e3e5; padding: 2px 6px; margin: 2px; border-radius: 4px; font-size: 11px; }
   </style>
 </head>
 <body>
@@ -57,13 +56,20 @@
     <button class="danger-outline" onclick="clearAllData()">Clear All Stored Entries</button>
   </div>
 
-  <!-- OCR Scanner Box -->
+  <!-- Barcode Scanner & Database Search Box -->
   <div class="card" style="background: #fdf6f0;">
-    <h3 style="margin-top:0;">📷 Scan Recipe or Nutrition Label</h3>
-    <label style="font-size: 13px; font-weight: bold;">Take Photo or Upload Image:</label>
-    <input type="file" id="ocrFile" accept="image/*" capture="environment">
-    <button class="primary-btn" style="background: #fd7e14;" onclick="handleImageScan()">Scan Image for Item</button>
-    <div id="ocrStatus"></div>
+    <h3 style="margin-top:0;">🔍 Food Database & Barcode Scanner</h3>
+    
+    <label style="font-size: 13px; font-weight: bold;">Search Food Database:</label>
+    <div style="display: flex; gap: 6px;">
+      <input type="text" id="dbSearchQuery" placeholder="e.g. apple, oats, protein bar...">
+      <button class="primary-btn" style="background: #28a745; width: 140px; margin-top: 6px;" onclick="searchFoodDatabase()">Search</button>
+    </div>
+    <div id="dbStatus"></div>
+
+    <label style="font-size: 13px; font-weight: bold; margin-top: 10px; display: block;">Barcode Scanner:</label>
+    <button class="primary-btn" style="background: #fd7e14;" onclick="startBarcodeScanner()">📷 Scan Barcode via Camera</button>
+    <div id="scannerStatus"></div>
   </div>
   
   <!-- Manual Itemized Log Box -->
@@ -137,7 +143,7 @@
     </div>
   </details>
 
-  <!-- Collapsible Section 2: Weight & Calorie History Log (Past Week / All Time) -->
+  <!-- Collapsible Section 2: Weight & Calorie History Log -->
   <details open>
     <summary>📋 Weight & History Log (Past Week & All-Time)</summary>
     <div style="margin-top: 10px;">
@@ -158,37 +164,32 @@
     </div>
   </details>
 
-  <!-- OCR Correction & Portion Modal -->
-  <div id="ocrModal">
+  <!-- Barcode Scanner Modal -->
+  <div id="scannerModal">
+    <div class="modal-content" style="text-align: center;">
+      <h3 style="margin-top:0;">Scanning Barcode...</h3>
+      <div style="position: relative; width: 100%; max-height: 300px; background: #000; overflow: hidden; border-radius: 6px;">
+        <video id="scannerVideo" autoplay playsinline style="width: 100%; height: auto;"></video>
+      </div>
+      <p id="scannerMessage" style="font-size: 13px; color: #666; margin-top: 8px;">Point camera at product barcode.</p>
+      <button class="secondary-btn" onclick="stopBarcodeScanner()">Cancel / Close</button>
+    </div>
+  </div>
+
+  <!-- Database Search Results Modal -->
+  <div id="dbModal">
     <div class="modal-content">
-      <h3 style="margin-top:0;">Verify & Save Scanned Item</h3>
-      <p style="font-size: 13px; color: #666;">Review the scanned text, correct the food name/calories, and specify your portion.</p>
-      
-      <label style="font-size: 12px; font-weight: bold;">Food Name:</label>
-      <input type="text" id="ocrFoodName" placeholder="e.g., Granola Bar">
-
-      <label style="font-size: 12px; font-weight: bold;">Meal Type:</label>
-      <select id="ocrMealType">
-        <option value="Snack">Snack</option>
-        <option value="Breakfast">Breakfast</option>
-        <option value="Lunch">Lunch</option>
-        <option value="Dinner">Dinner</option>
-      </select>
-
-      <label style="font-size: 12px; font-weight: bold;">Total Calories in Whole Batch / Label:</label>
-      <input type="number" id="ocrTotalCalories" placeholder="e.g., 650">
-
-      <label style="font-size: 12px; font-weight: bold;">Portion Eaten (Fraction or Decimal, e.g., 0.5 or 1/3):</label>
-      <input type="text" id="ocrPortion" value="1" placeholder="e.g., 0.5">
-
-      <button class="primary-btn" onclick="applyOcrItem()">Save Scanned Item to Log</button>
-      <button class="secondary-btn" onclick="closeOcrModal()">Cancel</button>
+      <h3 style="margin-top:0;">Select Food from Database</h3>
+      <div id="dbSearchResults" style="max-height: 300px; overflow-y: auto;"></div>
+      <button class="secondary-btn" onclick="closeDbModal()" style="margin-top: 10px;">Cancel</button>
     </div>
   </div>
 
   <script>
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
     let chartMonth, chartYear;
+    let videoStream = null;
+    let scanningActive = false;
 
     function sortEntries() {
       entries.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -383,71 +384,124 @@
       renderAll();
     }
 
-    // OCR Scanner Functions
-    function handleImageScan() {
-      const fileInput = document.getElementById('ocrFile');
-      const file = fileInput.files[0];
-      if (!file) {
-        showStatus("Please take or select a photo first.", "error", "ocrStatus");
+    // Open Food Facts Database Search
+    async function searchFoodDatabase() {
+      const query = document.getElementById('dbSearchQuery').value.trim();
+      if (!query) {
+        showStatus("Please enter a food name to search.", "error", "dbStatus");
         return;
       }
 
-      showStatus("Scanning image for text...", "info", "ocrStatus");
-
-      Tesseract.recognize(file, 'eng', {
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            showStatus(`Scanning: ${Math.round(m.progress * 100)}%`, "info", "ocrStatus");
-          }
-        }
-      }).then(({ data: { text } }) => {
-        showStatus("Scan complete! Review and adjust below.", "success", "ocrStatus");
-
-        const matches = text.match(/(?:calories|cal|kcal)[^\d]*(\d{2,4})/i);
-        let guessedCals = matches ? matches[1] : "";
-        if (!guessedCals) {
-          const nums = text.match(/\b\d{3,4}\b/g);
-          guessedCals = nums && nums.length > 0 ? nums[0] : "";
-        }
-
-        document.getElementById('ocrTotalCalories').value = guessedCals;
-        document.getElementById('ocrFoodName').value = "Scanned Item";
-        document.getElementById('ocrModal').style.display = 'block';
-        fileInput.value = '';
-      }).catch(err => {
-        showStatus("OCR Error: " + err.message, "error", "ocrStatus");
-      });
-    }
-
-    function closeOcrModal() {
-      document.getElementById('ocrModal').style.display = 'none';
-    }
-
-    function evaluateFraction(expr) {
+      showStatus("Searching Open Food Facts database...", "info", "dbStatus");
       try {
-        if (expr.includes('/')) {
-          let parts = expr.split('/');
-          return parseFloat(parts[0]) / parseFloat(parts[1]);
+        const response = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10`);
+        const data = await response.json();
+
+        if (!data.products || data.products.length === 0) {
+          showStatus("No matching foods found in database.", "error", "dbStatus");
+          return;
         }
-        return parseFloat(expr);
-      } catch {
-        return 1;
+
+        let resultsHtml = '';
+        data.products.forEach(prod => {
+          let name = prod.product_name || "Unknown Product";
+          let brand = prod.brands ? `(${prod.brands})` : "";
+          let cals = prod.nutriments && (prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) ? Math.round(prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) : "Unknown";
+          
+          resultsHtml += `<div class="search-result-item" onclick="selectDbFood('${name.replace(/'/g, "")} ${brand}', ${cals})">
+            <b>${name}</b> ${brand}<br><small style="color: #666;">Calories per 100g / serving: ${cals}</small>
+          </div>`;
+        });
+
+        document.getElementById('dbSearchResults').innerHTML = resultsHtml;
+        document.getElementById('dbModal').style.display = 'block';
+        showStatus("", "info", "dbStatus");
+      } catch (err) {
+        showStatus("Search error: " + err.message, "error", "dbStatus");
       }
     }
 
-    function applyOcrItem() {
-      let foodName = document.getElementById('ocrFoodName').value.trim() || "Scanned Item";
-      let mealType = document.getElementById('ocrMealType').value;
-      let totalCals = parseFloat(document.getElementById('ocrTotalCalories').value) || 0;
-      let portionExpr = document.getElementById('ocrPortion').value.trim();
-      let portionMultiplier = evaluateFraction(portionExpr);
-      if (isNaN(portionMultiplier) || portionMultiplier <= 0) portionMultiplier = 1;
+    function selectDbFood(name, cals) {
+      document.getElementById('foodName').value = name;
+      document.getElementById('foodCalories').value = isNaN(cals) ? 100 : cals;
+      closeDbModal();
+      showStatus("Food selected and loaded into form!", "success", "dbStatus");
+    }
 
-      let finalCals = Math.round(totalCals * portionMultiplier);
-      
-      addItemEntry({ name: foodName, meal: mealType, calories: finalCals });
-      closeOcrModal();
-      showStatus(`Successfully added ${foodName} (${finalCals} cals) to log!`, "success", "ocrStatus");
+    function closeDbModal() {
+      document.getElementById('dbModal').style.display = 'none';
+    }
+
+    // Barcode Scanner Integration
+    async function startBarcodeScanner() {
+      if (!('BarcodeDetector' in window)) {
+        alert("BarcodeDetector API is not supported in this browser. Please use Chrome on Android or a supported browser, or use the Database Search above.");
+        return;
+      }
+
+      const modal = document.getElementById('scannerModal');
+      const video = document.getElementById('scannerVideo');
+      modal.style.display = 'block';
+      scanningActive = true;
+
+      try {
+        videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        video.srcObject = videoStream;
+        await video.play();
+
+        const barcodeDetector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] });
+
+        const scanFrame = async () => {
+          if (!scanningActive) return;
+          try {
+            const barcodes = await barcodeDetector.detect(video);
+            if (barcodes.length > 0) {
+              const code = barcodes[0].rawValue;
+              stopBarcodeScanner();
+              fetchProductByBarcode(code);
+              return;
+            }
+          } catch (e) {
+            // detection frame skip
+          }
+          requestAnimationFrame(scanFrame);
+        };
+        requestAnimationFrame(scanFrame);
+      } catch (err) {
+        stopBarcodeScanner();
+        alert("Camera access error: " + err.message);
+      }
+    }
+
+    function stopBarcodeScanner() {
+      scanningActive = false;
+      if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+        videoStream = null;
+      }
+      document.getElementById('scannerModal').style.display = 'none';
+    }
+
+    async function fetchProductByBarcode(barcode) {
+      showStatus(`Fetching product for barcode ${barcode}...`, "info", "scannerStatus");
+      try {
+        const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+        const data = await response.json();
+
+        if (data.status === 1 && data.product) {
+          let prod = data.product;
+          let name = prod.product_name || "Scanned Barcode Item";
+          let cals = prod.nutriments && (prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) ? Math.round(prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) : 150;
+
+          document.getElementById('foodName').value = name;
+          document.getElementById('foodCalories').value = cals;
+          showStatus(`Successfully loaded ${name} (${cals} cals)!`, "success", "scannerStatus");
+        } else {
+          showStatus("Product not found in database for barcode: " + barcode, "error", "scannerStatus");
+        }
+      } catch (err) {
+        showStatus("Barcode lookup error: " + err.message, "error", "scannerStatus");
+      }
     }
 
     function handleFileImport() {
@@ -585,7 +639,7 @@
         projectedWeights.push(proj4Wk !== null ? parseFloat(proj4Wk.toFixed(1)) : null);
       });
 
-      // Render History Log (Past Week & All Time)
+      // Render History Log
       for (let idx = entries.length - 1; idx >= 0; idx--) {
         let entry = entries[idx];
         let netCal = entry.calories - entry.caloriesBurned;
@@ -716,9 +770,7 @@
       return windowPounds >= 0 ? `+${windowPounds.toFixed(2)}` : windowPounds.toFixed(2);
     }
 
-    // Update food log view when date picker changes
     document.getElementById('date').addEventListener('change', renderAll);
-
     window.onload = init;
   </script>
 </body>
