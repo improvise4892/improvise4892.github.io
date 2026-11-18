@@ -13,7 +13,8 @@
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
     input, select, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
     .card { background: #f9f9f9; padding: 15px; margin-top: 15px; border-radius: 8px; border: 1px solid #ddd; }
-    .chart-container { position: relative; width: 100%; margin-top: 20px; }
+    /* touch-action: none prevents the phone from scrolling the page when you touch the chart to pan/zoom */
+    .chart-container { position: relative; width: 100%; margin-top: 20px; touch-action: none; }
     table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
     th { background: #f1f1f1; }
@@ -41,7 +42,6 @@
       <option value="garmin">Garmin Calories CSV</option>
     </select>
 
-    <!-- accept="*" ensures mobile OS never greys out any file -->
     <input type="file" id="csvFile" accept="*">
     <button class="primary-btn" onclick="handleFileImport()">Import Selected CSV</button>
     <div id="importStatus"></div>
@@ -191,12 +191,19 @@
           zoom: {
             zoom: {
               wheel: { enabled: true },
-              pinch: { enabled: true }, // Enables finger-pinch zooming on mobile
-              mode: 'xy',
+              pinch: { enabled: true },
+              mode: 'x', // Zoom horizontally across dates
             },
             pan: {
               enabled: true,
-              mode: 'xy', // Enables dragging/swiping left and right with fingers
+              mode: 'x', // Pan/drag left and right across dates smoothly
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              maxTicksLimit: 8 // Prevents date labels from crowding when zooming in
             }
           }
         }
