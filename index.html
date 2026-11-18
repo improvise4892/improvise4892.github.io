@@ -83,22 +83,47 @@
       entries.sort((a, b) => new Date(a.date) - new Date(b.date));
     }
 
-    // Format date string YYYY-MM-DD into MMM-DD-YY (e.g. Nov-17-26)
+    // Format date string into MMM-DD-YY (e.g. Nov-17-26)
     function formatDateDisplay(dateStr) {
       if (!dateStr) return '';
-      // Handle potential timezone shifts by splitting components directly
+      // Clean up dots or slashes if present
+      dateStr = dateStr.replace(/\./g, '-').replace(/\//g, '-');
       const parts = dateStr.split('-');
       if (parts.length !== 3) return dateStr;
       
-      const year = parts[0];
-      const monthIndex = parseInt(parts[1], 10) - 1;
-      const day = parts[2];
+      let year = parts[0];
+      let monthIndex = parseInt(parts[1], 10) - 1;
+      let day = parts[2];
+
+      // Handle cases where format is DD-MM-YYYY or MM-DD-YYYY if necessary, standardizing to YYYY first if length of parts[0] is 2
+      if (year.length === 2) {
+        // Assume YY-MM-DD or MM-DD-YY, let's keep standard ISO YYYY-MM-DD parsing robust
+        year = parts[2];
+        monthIndex = parseInt(parts[0], 10) - 1;
+        day = parts[1];
+      }
 
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const mmm = months[monthIndex] || "Jan";
       const yy = year.slice(-2);
 
       return `${mmm}-${day}-${yy}`;
+    }
+
+    // Standardize input date to YYYY-MM-DD for storage
+    function standardizeDate(dateStr) {
+      if (!dateStr) return '';
+      dateStr = dateStr.trim().split(' ')[0]; // remove time component if any
+      dateStr = dateStr.replace(/\./g, '-').replace(/\//g, '-');
+      const parts = dateStr.split('-');
+      if (parts.length !== 3) return dateStr;
+      
+      if (parts[0].length === 4) {
+        return `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+      } else {
+        // Assume MM-DD-YYYY or DD-MM-YYYY
+        return `20${parts[2].slice(-2)}-${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}`;
+      }
     }
 
     const ctx = document.getElementById('chart').getContext('2d');
@@ -142,7 +167,161 @@
       const date = document.getElementById('date').value;
       const weight = parseFloat(document.getElementById('weight').value);
       let calories = document.getElementById('calories').value;
-      let caloriesBurned = document.getElementById
+      let caloriesBurned = document.getElementById('caloriesBurned').value;
 
+      if (!date || isNaN(weight)) {
+        alert("Please enter a valid date and weight.");
+        return;
+      }
 
+      calories = calories === "" ? 2200 : parseFloat(calories);
+      caloriesBurned = caloriesBurned === "" ? 0 : parseFloat(caloriesBurned);
+
+      entries = entries.filter(e => e.date !== date);
+      entries.push({ date, weight, calories, caloriesBurned });
       
+      sortEntries();
+      localStorage.setItem('weightData', JSON.stringify(entries));
+      renderAll();
+      
+      document.getElementById('weight').value = '';
+      document.getElementById('calories').value = '';
+      document.getElementById('caloriesBurned').value = '';
+    }
+
+    function deleteEntry(index) {
+      entries.splice(index, 1);
+      sortEntries();
+      localStorage.setItem('weightData', JSON.stringify(entries));
+      renderAll();
+    }
+
+    function importRenphoCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const text = e.target.result;
+        const lines = text.split('\n');
+        if (lines.length === 0) return;
+
+        // Auto-detect header columns
+        let headers = lines[0].split(',').map(h => h.toLowerCase().trim());
+        let dateIdx = headers.findIndex(h => h.includes('date') || h.includes('time'));
+        let weightIdx = headers.findIndex(h => h.includes('weight'));
+
+        // Fallbacks if headers aren't explicitly matched
+        if (dateIdx === -1) dateIdx = 0;
+        if (weightIdx === -1) weightIdx = 1;
+
+        let addedCount = 0;
+        let startIndex = (headers.some(h => h.includes('date') || h.includes('weight'))) ? 1 : 0;
+
+        for (let i = startIndex; i < lines.length; i++) {
+          let line = lines[i].trim();
+          if (!line) continue;
+          let cols = line.split(',').map(c => c.trim().replace(/"/g, ''));
+          
+          if (cols.length <= Math.max(dateIdx, weightIdx)) continue;
+
+          let rawDate = cols[dateIdx];
+          let standardizedDate = standardizeDate(rawDate);
+          let weightVal = parseFloat(cols[weightIdx]);
+
+          if (standardizedDate && !isNaN(weightVal)) {
+            let existing = entries.find(e => e.date === standardizedDate);
+            if (!existing) {
+              entries.push({
+                date: standardizedDate,
+                weight: weightVal,
+                calories: 2200,
+                caloriesBurned: 0
+              });
+              addedCount++;
+            } else {
+              existing.weight = weightVal;
+            }
+          }
+        }
+
+        sortEntries();
+        localStorage.setItem('weightData', JSON.stringify(entries));
+        renderAll();
+        alert(`Successfully imported/updated ${addedCount} weight entries from Renpho!`);
+      };
+      reader.readAsText(file);
+    }
+
+    function renderAll() {
+      sortEntries();
+      
+      chart.data.labels = entries.map(e => formatDateDisplay(e.date));
+      chart.data.datasets[0].data = entries.map(e => e.weight);
+
+      let projectedWeights = [];
+      let tableHtml = '';
+
+      entries.forEach((entry, idx) => {
+        let totalNetCal = 0;
+        for (let i = 0; i <= idx; i++) {
+          let net = entries[i].calories - entries[i].caloriesBurned;
+          totalNetCal += net;
+        }
+        let avgDailyNet = totalNetCal / (idx + 1);
+        let weeklyRate = (avgDailyNet / 3500) * 7;
+        let proj4Wk = entry.weight + (weeklyRate * 4);
+        projectedWeights.push(parseFloat(proj4Wk.toFixed(1)));
+
+        tableHtml += `<tr>
+          <td>${formatDateDisplay(entry.date)}</td>
+          <td>${entry.weight}</td>
+          <td>${entry.calories}</td>
+          <td>${entry.caloriesBurned}</td>
+          <td><button class="delete-btn" onclick="deleteEntry(${idx})">Delete</button></td>
+        </tr>`;
+      });
+
+      chart.data.datasets[1].data = projectedWeights;
+      chart.update();
+      document.getElementById('historyTableBody').innerHTML = tableHtml;
+
+      if (entries.length > 0) {
+        document.getElementById('statsCard').style.display = 'block';
+        const latestProj = projectedWeights[projectedWeights.length - 1];
+        document.getElementById('proj4Weeks').innerText = latestProj;
+
+        document.getElementById('change1Day').innerText = getWindowChange(1);
+        document.getElementById('change3Days').innerText = getWindowChange(3);
+        document.getElementById('change1Week').innerText = getWindowChange(7);
+        document.getElementById('change1Month').innerText = getWindowChange(30);
+      } else {
+        document.getElementById('statsCard').style.display = 'none';
+      }
+    }
+
+    function getWindowChange(days) {
+      if (entries.length === 0) return "0.0";
+      let latestDate = new Date(entries[entries.length - 1].date);
+      let totalNet = 0;
+      let count = 0;
+
+      entries.forEach(e => {
+        let eDate = new Date(e.date);
+        let diffTime = latestDate - eDate;
+        let diffDays = diffTime / (1000 * 3600 * 24);
+        if (diffDays >= 0 && diffDays < days) {
+          totalNet += (e.calories - e.caloriesBurned);
+          count++;
+        }
+      });
+
+      if (count === 0) totalNet = entries[entries.length - 1].calories - entries[entries.length - 1].caloriesBurned;
+      let windowPounds = (totalNet / 3500); 
+      return windowPounds >= 0 ? `+${windowPounds.toFixed(2)}` : windowPounds.toFixed(2);
+    }
+
+    init();
+  </script>
+</body>
+</html>
