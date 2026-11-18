@@ -30,18 +30,19 @@
 <body>
   <h2>Weight & Calorie Tracker</h2>
 
-  <!-- Universal File Import Box -->
+  <!-- File Import Box -->
   <div class="card" style="background: #f0f7ff;">
-    <h3 style="margin-top:0;">Import CSV Data</h3>
+    <h3 style="margin-top:0;">Import CSV File</h3>
     
-    <label style="font-size: 13px; font-weight: bold;">Select File Type:</label>
+    <label style="font-size: 13px; font-weight: bold;">Select Data Type:</label>
     <select id="importType">
       <option value="renpho">Renpho Weight CSV</option>
       <option value="garmin">Garmin Calories CSV</option>
     </select>
 
     <input type="file" id="csvFile" accept="*">
-    <button class="primary-btn" onclick="handleFileImport()">Import Selected CSV</button>
+    <button class="primary-btn" onclick="handleFileImport()">Import Selected File</button>
+    
     <div id="importStatus"></div>
     <button class="danger-outline" onclick="clearAllData()">Clear All Stored Entries</button>
   </div>
@@ -103,7 +104,8 @@
 
   <script>
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
-    
+    let chartMonth, chartYear, chartAll;
+
     function sortEntries() {
       entries.sort((a, b) => new Date(a.date) - new Date(b.date));
     }
@@ -142,7 +144,7 @@
 
     function parseDateOnly(rawStr) {
       if (!rawStr) return '';
-      let clean = rawStr.trim().replace(/^"|"$/g, '').replace(/^\ufeff/, '');
+      let clean = rawStr.trim().replace(/^"|"$/g, '').replace(/^\ufeff/, '').replace(/^ï»¿/, '');
 
       let ymdMatch = clean.match(/^(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
       if (ymdMatch) {
@@ -184,40 +186,41 @@
       return result;
     }
 
-    const commonChartOptions = {
-      responsive: true,
-      scales: {
-        x: { ticks: { maxTicksLimit: 8 } }
-      }
-    };
+    function initCharts() {
+      const commonChartOptions = {
+        responsive: true,
+        scales: {
+          x: { ticks: { maxTicksLimit: 8 } }
+        }
+      };
 
-    // Both weight and red projection points set to smaller, identical radius (3)
-    const createChartConfig = () => ({
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [
-          { label: 'Weight', data: [], borderColor: 'blue', backgroundColor: 'blue', pointRadius: 3, fill: false, spanGaps: true },
-          { label: 'Next-Day Proj.', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 3, pointStyle: 'circle', fill: false, spanGaps: true }
-        ]
-      },
-      options: commonChartOptions
-    });
+      const createConfig = () => ({
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            { label: 'Weight', data: [], borderColor: 'blue', backgroundColor: 'blue', pointRadius: 3, fill: false, spanGaps: true },
+            { label: 'Next-Day Proj.', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 3, pointStyle: 'circle', fill: false, spanGaps: true }
+          ]
+        },
+        options: commonChartOptions
+      });
 
-    const chartMonth = new Chart(document.getElementById('chartMonth').getContext('2d'), createChartConfig());
-    const chartYear = new Chart(document.getElementById('chartYear').getContext('2d'), createChartConfig());
-    const chartAll = new Chart(document.getElementById('chartAll').getContext('2d'), {
-      type: 'line',
-      data: { 
-        labels: [], 
-        datasets: [
-          { label: 'Actual Weight', data: [], borderColor: 'blue', backgroundColor: 'blue', pointRadius: 3, fill: false, spanGaps: true },
-          { label: 'Next-Day Proj.', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 3, pointStyle: 'circle', fill: false, spanGaps: true },
-          { label: '4-Week Proj. Line', data: [], borderColor: 'orange', borderDash: [5, 5], pointRadius: 0, fill: false, spanGaps: true }
-        ] 
-      },
-      options: commonChartOptions
-    });
+      chartMonth = new Chart(document.getElementById('chartMonth').getContext('2d'), createConfig());
+      chartYear = new Chart(document.getElementById('chartYear').getContext('2d'), createConfig());
+      chartAll = new Chart(document.getElementById('chartAll').getContext('2d'), {
+        type: 'line',
+        data: { 
+          labels: [], 
+          datasets: [
+            { label: 'Actual Weight', data: [], borderColor: 'blue', backgroundColor: 'blue', pointRadius: 3, fill: false, spanGaps: true },
+            { label: 'Next-Day Proj.', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 3, pointStyle: 'circle', fill: false, spanGaps: true },
+            { label: '4-Week Proj. Line', data: [], borderColor: 'orange', borderDash: [5, 5], pointRadius: 0, fill: false, spanGaps: true }
+          ] 
+        },
+        options: commonChartOptions
+      });
+    }
 
     function clearAllData() {
       if (confirm("Are you sure you want to delete all logged entries?")) {
@@ -230,6 +233,7 @@
 
     function init() {
       document.getElementById('date').valueAsDate = new Date();
+      initCharts();
       renderAll();
     }
 
@@ -283,7 +287,6 @@
       }
 
       showStatus("Reading file...", "info");
-
       const reader = new FileReader();
       reader.onload = function(e) {
         try {
@@ -291,13 +294,13 @@
           const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
           
           if (lines.length < 2) {
-            showStatus("The CSV file is empty or missing rows.", "error");
+            showStatus("The file appears to be empty or missing rows.", "error");
             return;
           }
 
           const headerLine = lines[0];
           const delimiter = headerLine.includes('\t') ? '\t' : (headerLine.includes(';') ? ';' : ',');
-          const headers = splitCSVLine(headerLine, delimiter).map(h => h.toLowerCase().replace(/\s+/g, ' ').replace(/^\ufeff/, '').trim());
+          const headers = splitCSVLine(headerLine, delimiter).map(h => h.toLowerCase().replace(/\s+/g, ' ').replace(/^\ufeff/, '').replace(/^ï»¿/, '').trim());
           
           let addedCount = 0;
 
@@ -353,7 +356,7 @@
                     date: standardizedDate,
                     weight: weightVal,
                     calories: 2200,
-                    caloriesBurned: 2000 // default burn if not yet imported
+                    caloriesBurned: 2000
                   });
                   addedCount++;
                 } else {
@@ -367,7 +370,7 @@
           localStorage.setItem('weightData', JSON.stringify(entries));
           renderAll();
           fileInput.value = '';
-          showStatus(`Success! Imported/updated ${addedCount} entries.`, "success");
+          showStatus(`Success! Imported or updated ${addedCount} entries.`, "success");
         } catch (err) {
           showStatus("Error parsing file: " + err.message, "error");
         }
@@ -387,7 +390,6 @@
       let tableHtml = '';
 
       entries.forEach((entry, idx) => {
-        // Enforce 2000 default if caloriesBurned is 0 or missing
         if (!entry.caloriesBurned || entry.caloriesBurned === 0) {
           entry.caloriesBurned = 2000;
         }
@@ -415,7 +417,6 @@
         let labels = [];
         let weights = [];
         let projPoints = [];
-        let proj4WkPoints = new Array(filteredEntries.length).fill(null);
 
         filteredEntries.forEach((entry, index) => {
           labels.push(formatDateDisplay(entry.date));
@@ -469,4 +470,37 @@
         document.getElementById('proj4Weeks').innerText = latestProj;
 
         document.getElementById('change1Day').innerText = getWindowChange(1);
-        document.getElementById('change3Days').innerText = getWindowChange(
+        document.getElementById('change3Days').innerText = getWindowChange(3);
+        document.getElementById('change1Week').innerText = getWindowChange(7);
+        document.getElementById('change1Month').innerText = getWindowChange(30);
+      } else {
+        document.getElementById('statsCard').style.display = 'none';
+      }
+    }
+
+    function getWindowChange(days) {
+      if (entries.length === 0) return "0.0";
+      let latestDate = new Date(entries[entries.length - 1].date);
+      let totalNet = 0;
+      let count = 0;
+
+      entries.forEach(e => {
+        let eDate = new Date(e.date);
+        let diffTime = latestDate - eDate;
+        let diffDays = diffTime / (1000 * 3600 * 24);
+        if (diffDays >= 0 && diffDays < days) {
+          totalNet += (e.calories - (e.caloriesBurned || 2000));
+          count++;
+        }
+      });
+
+      if (count === 0) totalNet = entries[entries.length - 1].calories - (entries[entries.length - 1].caloriesBurned || 2000);
+      let windowPounds = (totalNet / 3500); 
+      return windowPounds >= 0 ? `+${windowPounds.toFixed(2)}` : windowPounds.toFixed(2);
+    }
+
+    // Run initialization on page load
+    window.onload = init;
+  </script>
+</body>
+</html>
