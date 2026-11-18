@@ -4,16 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Weight & Calorie Tracker</title>
-  <!-- Chart.js, Hammer.js, and Zoom Plugin -->
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/hammerjs/2.0.8/hammer.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
   
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
     input, select, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
     .card { background: #f9f9f9; padding: 15px; margin-top: 15px; border-radius: 8px; border: 1px solid #ddd; }
-    .chart-container { position: relative; width: 100%; margin-top: 20px; touch-action: none; }
+    .chart-container { position: relative; width: 100%; margin-top: 25px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #eee; }
     table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
     th { background: #f1f1f1; }
@@ -26,6 +24,7 @@
     button.danger-outline { background: white; color: #cc0000; border: 1px solid #cc0000; margin-top: 8px; cursor: pointer; }
     button.danger-outline:hover { background: #fff0f0; }
     #importStatus { font-size: 14px; margin-top: 8px; font-weight: bold; padding: 6px; border-radius: 4px; display: none; }
+    h3.chart-title { margin-bottom: 5px; font-size: 16px; color: #333; }
   </style>
 </head>
 <body>
@@ -72,9 +71,20 @@
     </ul>
   </div>
 
+  <!-- Three Separate Charts -->
   <div class="chart-container">
-    <canvas id="chart"></canvas>
-    <button class="secondary-btn" onclick="resetZoom()">Reset Chart Zoom</button>
+    <h3 class="chart-title">📊 Past Month View</h3>
+    <canvas id="chartMonth"></canvas>
+  </div>
+
+  <div class="chart-container">
+    <h3 class="chart-title">📈 Past Year View</h3>
+    <canvas id="chartYear"></canvas>
+  </div>
+
+  <div class="chart-container">
+    <h3 class="chart-title">🌐 All-Time View</h3>
+    <canvas id="chartAll"></canvas>
   </div>
 
   <h3>History Log</h3>
@@ -174,45 +184,37 @@
       return result;
     }
 
-    const ctx = document.getElementById('chart').getContext('2d');
-    const chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [
-          { label: 'Actual Weight', data: [], borderColor: 'blue', fill: false, spanGaps: true },
-          { label: '4-Week Proj. Weight', data: [], borderColor: 'red', borderDash: [5, 5], fill: false, spanGaps: true }
-        ]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          zoom: {
-            zoom: {
-              wheel: { enabled: true, speed: 0.1 },
-              pinch: { enabled: true },
-              mode: 'x',
-            },
-            pan: {
-              enabled: true,
-              mode: 'x',
-              threshold: 10,
-            }
-          }
-        },
-        scales: {
-          x: {
-            ticks: {
-              maxTicksLimit: 8
-            }
-          }
-        }
+    // Initialize 3 separate charts
+    const commonChartOptions = {
+      responsive: true,
+      scales: {
+        x: { ticks: { maxTicksLimit: 8 } }
       }
+    };
+
+    const chartMonth = new Chart(document.getElementById('chartMonth').getContext('2d'), {
+      type: 'line',
+      data: { labels: [], datasets: [{ label: 'Weight', data: [], borderColor: 'blue', fill: false, spanGaps: true }] },
+      options: commonChartOptions
     });
 
-    function resetZoom() {
-      chart.resetZoom();
-    }
+    const chartYear = new Chart(document.getElementById('chartYear').getContext('2d'), {
+      type: 'line',
+      data: { labels: [], datasets: [{ label: 'Weight', data: [], borderColor: 'blue', fill: false, spanGaps: true }] },
+      options: commonChartOptions
+    });
+
+    const chartAll = new Chart(document.getElementById('chartAll').getContext('2d'), {
+      type: 'line',
+      data: { 
+        labels: [], 
+        datasets: [
+          { label: 'Actual Weight', data: [], borderColor: 'blue', fill: false, spanGaps: true },
+          { label: '4-Week Proj.', data: [], borderColor: 'red', borderDash: [5, 5], fill: false, spanGaps: true }
+        ] 
+      },
+      options: commonChartOptions
+    });
 
     function clearAllData() {
       if (confirm("Are you sure you want to delete all logged entries?")) {
@@ -329,121 +331,4 @@
             let dateIdx = headers.findIndex(h => h.includes('date') || h.includes('time'));
             let weightIdx = headers.findIndex(h => h.includes('weight'));
 
-            if (dateIdx === -1) dateIdx = 0;
-            if (weightIdx === -1) weightIdx = 1;
-
-            for (let i = 1; i < lines.length; i++) {
-              const cols = splitCSVLine(lines[i], delimiter);
-              if (cols.length <= Math.max(dateIdx, weightIdx)) continue;
-
-              const standardizedDate = parseDateOnly(cols[dateIdx]);
-              const rawWeight = cols[weightIdx].replace(/[^0-9.]/g, '');
-              const weightVal = parseFloat(rawWeight);
-
-              if (standardizedDate && !isNaN(weightVal) && weightVal > 0) {
-                let existing = entries.find(e => e.date === standardizedDate);
-                if (!existing) {
-                  entries.push({
-                    date: standardizedDate,
-                    weight: weightVal,
-                    calories: 2200,
-                    caloriesBurned: 0
-                  });
-                  addedCount++;
-                } else {
-                  existing.weight = weightVal;
-                }
-              }
-            }
-          }
-
-          sortEntries();
-          localStorage.setItem('weightData', JSON.stringify(entries));
-          renderAll();
-          fileInput.value = '';
-          showStatus(`Success! Imported or updated ${addedCount} entries.`, "success");
-        } catch (err) {
-          showStatus("Error parsing file: " + err.message, "error");
-        }
-      };
-
-      reader.onerror = function() {
-        showStatus("Failed to read file.", "error");
-      };
-
-      reader.readAsText(file);
-    }
-
-    function renderAll() {
-      sortEntries();
-      
-      chart.data.labels = entries.map(e => formatDateDisplay(e.date));
-      chart.data.datasets[0].data = entries.map(e => e.weight);
-
-      let projectedWeights = [];
-      let tableHtml = '';
-
-      entries.forEach((entry, idx) => {
-        let totalNetCal = 0;
-        for (let i = 0; i <= idx; i++) {
-          let net = entries[i].calories - entries[i].caloriesBurned;
-          totalNetCal += net;
-        }
-        let avgDailyNet = totalNetCal / (idx + 1);
-        let weeklyRate = (avgDailyNet / 3500) * 7;
-        let proj4Wk = entry.weight !== null ? entry.weight + (weeklyRate * 4) : null;
-        projectedWeights.push(proj4Wk !== null ? parseFloat(proj4Wk.toFixed(1)) : null);
-
-        tableHtml += `<tr>
-          <td>${formatDateDisplay(entry.date)}</td>
-          <td>${entry.weight !== null ? entry.weight : '--'}</td>
-          <td>${entry.calories}</td>
-          <td>${entry.caloriesBurned}</td>
-          <td><button class="delete-btn" onclick="deleteEntry(${idx})">Delete</button></td>
-        </tr>`;
-      });
-
-      chart.data.datasets[1].data = projectedWeights;
-      chart.update();
-      document.getElementById('historyTableBody').innerHTML = tableHtml;
-
-      if (entries.length > 0) {
-        document.getElementById('statsCard').style.display = 'block';
-        const validProjs = projectedWeights.filter(p => p !== null);
-        const latestProj = validProjs.length > 0 ? validProjs[validProjs.length - 1] : '--';
-        document.getElementById('proj4Weeks').innerText = latestProj;
-
-        document.getElementById('change1Day').innerText = getWindowChange(1);
-        document.getElementById('change3Days').innerText = getWindowChange(3);
-        document.getElementById('change1Week').innerText = getWindowChange(7);
-        document.getElementById('change1Month').innerText = getWindowChange(30);
-      } else {
-        document.getElementById('statsCard').style.display = 'none';
-      }
-    }
-
-    function getWindowChange(days) {
-      if (entries.length === 0) return "0.0";
-      let latestDate = new Date(entries[entries.length - 1].date);
-      let totalNet = 0;
-      let count = 0;
-
-      entries.forEach(e => {
-        let eDate = new Date(e.date);
-        let diffTime = latestDate - eDate;
-        let diffDays = diffTime / (1000 * 3600 * 24);
-        if (diffDays >= 0 && diffDays < days) {
-          totalNet += (e.calories - e.caloriesBurned);
-          count++;
-        }
-      });
-
-      if (count === 0) totalNet = entries[entries.length - 1].calories - entries[entries.length - 1].caloriesBurned;
-      let windowPounds = (totalNet / 3500); 
-      return windowPounds >= 0 ? `+${windowPounds.toFixed(2)}` : windowPounds.toFixed(2);
-    }
-
-    init();
-  </script>
-</body>
-</html>
+            if (dateIdx
