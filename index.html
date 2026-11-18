@@ -32,11 +32,11 @@
 <body>
   <h2>Weight & Calorie Tracker</h2>
 
-  <!-- CSV Paste Box (Mobile Friendly) -->
+  <!-- CSV / Google Sheets Paste Box -->
   <div class="card" style="background: #f0f7ff;">
     <h3 style="margin-top:0;">Import Renpho Data</h3>
-    <p style="font-size: 13px; color: #555; margin-bottom: 5px;">Open your Renpho CSV file, copy all rows (including headers like <code>Date Time, Weight(lb)</code>), and paste them below:</p>
-    <textarea id="csvPasteArea" placeholder="Date Time,Weight(lb)&#10;2025-11-17 08:00:00,165.4"></textarea>
+    <p style="font-size: 13px; color: #555; margin-bottom: 5px;">Copy your rows from Google Sheets (including the <code>Date Time</code> and <code>Weight(lb)</code> headers) and paste them below:</p>
+    <textarea id="csvPasteArea" placeholder="Date Time&#9;Weight(lb)&#10;2025-11-17 08:00:00&#9;165.4"></textarea>
     <button class="primary-btn" onclick="handlePasteImport()">Process & Import Data</button>
     <div id="importStatus"></div>
     <button class="danger-outline" onclick="clearAllData()">Clear All Stored Entries</button>
@@ -251,7 +251,7 @@
     function handlePasteImport() {
       const pasteText = document.getElementById('csvPasteArea').value;
       if (!pasteText.trim()) {
-        showStatus("Please paste your CSV data into the box first.", "error");
+        showStatus("Please paste your data into the box first.", "error");
         return;
       }
 
@@ -263,7 +263,8 @@
         }
 
         const headerLine = lines[0];
-        const delimiter = headerLine.includes(';') ? ';' : (headerLine.includes('\t') ? '\t' : ',');
+        // Automatically detects tabs (from Google Sheets), semicolons, or commas
+        const delimiter = headerLine.includes('\t') ? '\t' : (headerLine.includes(';') ? ';' : ',');
         const headers = splitCSVLine(headerLine, delimiter).map(h => h.toLowerCase().replace(/\s+/g, ' ').trim());
         
         let dateIdx = headers.findIndex(h => h === 'date time' || h.includes('date') || h.includes('time'));
@@ -300,7 +301,7 @@
         sortEntries();
         localStorage.setItem('weightData', JSON.stringify(entries));
         renderAll();
-        document.getElementById('csvPasteArea.value') = '';
+        document.getElementById('csvPasteArea').value = '';
         showStatus(`Success! Imported or updated ${addedCount} entries.`, "success");
       } catch (err) {
         showStatus("Error parsing data: " + err.message, "error");
