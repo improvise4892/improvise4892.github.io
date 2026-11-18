@@ -29,10 +29,10 @@
     button.danger-outline:hover { background: #fff0f0; }
     #importStatus, #ocrStatus { font-size: 14px; margin-top: 8px; font-weight: bold; padding: 6px; border-radius: 4px; display: none; }
     
-    /* Modal Styling for OCR Correction */
     #ocrModal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
     .modal-content { background: #fff; margin: 10% auto; padding: 20px; width: 90%; max-width: 500px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
     h3.chart-title { margin-bottom: 5px; font-size: 16px; color: #333; }
+    .item-tag { display: inline-block; background: #e2e3e5; padding: 2px 6px; margin: 2px; border-radius: 4px; font-size: 11px; }
   </style>
 </head>
 <body>
@@ -60,23 +60,39 @@
     <h3 style="margin-top:0;">📷 Scan Recipe or Nutrition Label</h3>
     <label style="font-size: 13px; font-weight: bold;">Take Photo or Upload Image:</label>
     <input type="file" id="ocrFile" accept="image/*" capture="environment">
-    <button class="primary-btn" style="background: #fd7e14;" onclick="handleImageScan()">Scan Image for Calories</button>
+    <button class="primary-btn" style="background: #fd7e14;" onclick="handleImageScan()">Scan Image for Item</button>
     <div id="ocrStatus"></div>
   </div>
   
-  <label>Date:</label>
-  <input type="date" id="date">
-  
-  <label>Weight (lbs):</label>
-  <input type="number" step="0.1" id="weight" placeholder="e.g., 150">
-  
-  <label>Calories Consumed (optional):</label>
-  <input type="number" id="calories" placeholder="Defaults to 2200 if blank">
+  <!-- Manual Itemized Log Box -->
+  <div class="card" style="background: #f4fdf4;">
+    <h3 style="margin-top:0;">🍽️ Log Food Item & Weight</h3>
+    
+    <label>Date:</label>
+    <input type="date" id="date">
+    
+    <label>Food Item Description:</label>
+    <input type="text" id="foodName" placeholder="e.g., Chewy bar">
 
-  <label>Calories Burned (optional):</label>
-  <input type="number" id="caloriesBurned" placeholder="Defaults to 2000 if blank">
+    <label>Meal Type:</label>
+    <select id="mealType">
+      <option value="Snack">Snack</option>
+      <option value="Breakfast">Breakfast</option>
+      <option value="Lunch">Lunch</option>
+      <option value="Dinner">Dinner</option>
+    </select>
 
-  <button class="primary-btn" onclick="addData()">Save Entry</button>
+    <label>Calories for this item:</label>
+    <input type="number" id="foodCalories" placeholder="e.g., 150">
+
+    <label>Weight (lbs) [Optional]:</label>
+    <input type="number" step="0.1" id="weight" placeholder="e.g., 150">
+
+    <label>Calories Burned (optional):</label>
+    <input type="number" id="caloriesBurned" placeholder="Defaults to 2000 if blank">
+
+    <button class="primary-btn" style="background: #28a745;" onclick="addItemEntry()">Save Item & Weight</button>
+  </div>
 
   <div class="card" id="statsCard" style="display:none;">
     <h3>Trend Analysis (Based on Latest Log)</h3>
@@ -106,6 +122,7 @@
       <tr>
         <th>Date</th>
         <th>Weight</th>
+        <th>Items Eaten</th>
         <th>Consumed</th>
         <th>Burned</th>
         <th>Proj. Change</th>
@@ -119,11 +136,19 @@
   <!-- OCR Correction & Portion Modal -->
   <div id="ocrModal">
     <div class="modal-content">
-      <h3 style="margin-top:0;">Verify & Adjust Scanned Calories</h3>
-      <p style="font-size: 13px; color: #666;">Review the raw text scanned from your image, correct any numbers, and specify how much you ate.</p>
+      <h3 style="margin-top:0;">Verify & Save Scanned Item</h3>
+      <p style="font-size: 13px; color: #666;">Review the scanned text, correct the food name/calories, and specify your portion.</p>
       
-      <label style="font-size: 12px; font-weight: bold;">Raw OCR Text (Editable):</label>
-      <textarea id="ocrRawText" style="height: 80px; font-size: 12px; font-family: monospace;"></textarea>
+      <label style="font-size: 12px; font-weight: bold;">Food Name:</label>
+      <input type="text" id="ocrFoodName" placeholder="e.g., Granola Bar">
+
+      <label style="font-size: 12px; font-weight: bold;">Meal Type:</label>
+      <select id="ocrMealType">
+        <option value="Snack">Snack</option>
+        <option value="Breakfast">Breakfast</option>
+        <option value="Lunch">Lunch</option>
+        <option value="Dinner">Dinner</option>
+      </select>
 
       <label style="font-size: 12px; font-weight: bold;">Total Calories in Whole Batch / Label:</label>
       <input type="number" id="ocrTotalCalories" placeholder="e.g., 650">
@@ -131,7 +156,7 @@
       <label style="font-size: 12px; font-weight: bold;">Portion Eaten (Fraction or Decimal, e.g., 0.5 or 1/3):</label>
       <input type="text" id="ocrPortion" value="1" placeholder="e.g., 0.5">
 
-      <button class="primary-btn" onclick="applyOcrCalories()">Apply to Calories Consumed</button>
+      <button class="primary-btn" onclick="applyOcrItem()">Save Scanned Item to Log</button>
       <button class="secondary-btn" onclick="closeOcrModal()">Cancel</button>
     </div>
   </div>
@@ -245,7 +270,7 @@
     }
 
     function clearAllData() {
-      if (confirm("Are you sure you want to delete all logged entries?")) {
+      if (confirm("Are you sure you want to delete all stored entries?")) {
         entries = [];
         localStorage.removeItem('weightData');
         renderAll();
@@ -259,36 +284,54 @@
       renderAll();
     }
 
-    function addData() {
+    function addItemEntry(customItem = null) {
       const date = document.getElementById('date').value;
-      const weightVal = document.getElementById('weight').value;
-      let calories = document.getElementById('calories').value;
-      let caloriesBurned = document.getElementById('caloriesBurned').value;
-
       if (!date) {
         alert("Please select a date.");
         return;
       }
 
-      const weight = weightVal === "" ? null : parseFloat(weightVal);
-      calories = calories === "" ? 2200 : parseFloat(calories);
-      caloriesBurned = (caloriesBurned === "" || parseFloat(caloriesBurned) === 0) ? 2000 : parseFloat(caloriesBurned);
-
       let existing = entries.find(e => e.date === date);
-      if (existing) {
-        existing.weight = weight;
-        existing.calories = calories;
-        existing.caloriesBurned = caloriesBurned;
-      } else {
-        entries.push({ date, weight, calories, caloriesBurned });
+      if (!existing) {
+        existing = { date, weight: null, calories: 2200, caloriesBurned: 2000, items: [] };
+        entries.push(existing);
       }
-      
+
+      const weightVal = document.getElementById('weight').value;
+      if (weightVal !== "") existing.weight = parseFloat(weightVal);
+
+      let burnedVal = document.getElementById('caloriesBurned').value;
+      if (burnedVal !== "" && parseFloat(burnedVal) !== 0) {
+        existing.caloriesBurned = parseFloat(burnedVal);
+      }
+
+      let item = customItem;
+      if (!item) {
+        const foodName = document.getElementById('foodName').value.trim();
+        const mealType = document.getElementById('mealType').value;
+        const foodCals = parseFloat(document.getElementById('foodCalories').value);
+
+        if (foodName && !isNaN(foodCals)) {
+          item = { name: foodName, meal: mealType, calories: foodCals };
+        }
+      }
+
+      if (item) {
+        if (!existing.items) existing.items = [];
+        existing.items.push(item);
+        // Recalculate total consumed calories from items
+        existing.calories = existing.items.reduce((sum, i) => sum + i.calories, 0);
+      } else if (!existing.items || existing.items.length === 0) {
+        existing.calories = 2200;
+      }
+
       sortEntries();
       localStorage.setItem('weightData', JSON.stringify(entries));
       renderAll();
       
+      document.getElementById('foodName').value = '';
+      document.getElementById('foodCalories').value = '';
       document.getElementById('weight').value = '';
-      document.getElementById('calories').value = '';
       document.getElementById('caloriesBurned').value = '';
       document.getElementById('date').valueAsDate = new Date();
     }
@@ -297,13 +340,20 @@
       const entry = entries[index];
       document.getElementById('date').value = entry.date;
       document.getElementById('weight').value = entry.weight !== null ? entry.weight : '';
-      document.getElementById('calories').value = entry.calories;
       document.getElementById('caloriesBurned').value = entry.caloriesBurned;
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function deleteEntry(index) {
       entries.splice(index, 1);
+      sortEntries();
+      localStorage.setItem('weightData', JSON.stringify(entries));
+      renderAll();
+    }
+
+    function deleteItem(entryIndex, itemIndex) {
+      entries[entryIndex].items.splice(itemIndex, 1);
+      entries[entryIndex].calories = entries[entryIndex].items.reduce((sum, i) => sum + i.calories, 0);
       sortEntries();
       localStorage.setItem('weightData', JSON.stringify(entries));
       renderAll();
@@ -328,18 +378,16 @@
         }
       }).then(({ data: { text } }) => {
         showStatus("Scan complete! Review and adjust below.", "success", "ocrStatus");
-        document.getElementById('ocrRawText').value = text;
 
-        // Try to intelligently guess calorie numbers from text
         const matches = text.match(/(?:calories|cal|kcal)[^\d]*(\d{2,4})/i);
         let guessedCals = matches ? matches[1] : "";
         if (!guessedCals) {
-          // Fallback: find any 3-digit number that looks like calories
           const nums = text.match(/\b\d{3,4}\b/g);
           guessedCals = nums && nums.length > 0 ? nums[0] : "";
         }
 
         document.getElementById('ocrTotalCalories').value = guessedCals;
+        document.getElementById('ocrFoodName').value = "Scanned Item";
         document.getElementById('ocrModal').style.display = 'block';
         fileInput.value = '';
       }).catch(err => {
@@ -363,16 +411,19 @@
       }
     }
 
-    function applyOcrCalories() {
+    function applyOcrItem() {
+      let foodName = document.getElementById('ocrFoodName').value.trim() || "Scanned Item";
+      let mealType = document.getElementById('ocrMealType').value;
       let totalCals = parseFloat(document.getElementById('ocrTotalCalories').value) || 0;
       let portionExpr = document.getElementById('ocrPortion').value.trim();
       let portionMultiplier = evaluateFraction(portionExpr);
       if (isNaN(portionMultiplier) || portionMultiplier <= 0) portionMultiplier = 1;
 
       let finalCals = Math.round(totalCals * portionMultiplier);
-      document.getElementById('calories').value = finalCals;
+      
+      addItemEntry({ name: foodName, meal: mealType, calories: finalCals });
       closeOcrModal();
-      showStatus(`Successfully added ${finalCals} calories from scan!`, "success", "ocrStatus");
+      showStatus(`Successfully added ${foodName} (${finalCals} cals) to log!`, "success", "ocrStatus");
     }
 
     function handleFileImport() {
@@ -426,7 +477,8 @@
                     date: standardizedDate,
                     weight: null, 
                     calories: 2200,
-                    caloriesBurned: Math.round(dailyTotal)
+                    caloriesBurned: Math.round(dailyTotal),
+                    items: []
                   });
                   addedCount++;
                 }
@@ -454,7 +506,8 @@
                     date: standardizedDate,
                     weight: weightVal,
                     calories: 2200,
-                    caloriesBurned: 2000
+                    caloriesBurned: 2000,
+                    items: []
                   });
                   addedCount++;
                 } else {
@@ -491,6 +544,7 @@
         if (!entry.caloriesBurned || entry.caloriesBurned === 0) {
           entry.caloriesBurned = 2000;
         }
+        if (!entry.items) entry.items = [];
 
         let totalNetCal = 0;
         for (let i = 0; i <= idx; i++) {
@@ -524,9 +578,14 @@
           }
         }
 
+        let itemsHtml = entry.items.map((item, iIdx) => 
+          `<span class="item-tag"><b>[${item.meal}]</b> ${item.name}: ${item.calories}cal <a href="javascript:void(0)" onclick="deleteItem(${idx}, ${iIdx})" style="color:red; text-decoration:none;">×</a></span>`
+        ).join('<br>');
+
         tableHtml += `<tr>
           <td>${formatDateDisplay(entry.date)}</td>
           <td>${entry.weight !== null ? entry.weight : '--'}</td>
+          <td style="text-align: left; max-width: 200px;">${itemsHtml || '<i>No items logged</i>'}</td>
           <td>${entry.calories}</td>
           <td>${entry.caloriesBurned}</td>
           <td style="color: ${dailyProjChange < 0 ? 'green' : (dailyProjChange > 0 ? 'red' : 'inherit')}">${projStr} lbs</td>
