@@ -56,7 +56,7 @@
   <input type="number" id="calories" placeholder="Defaults to 2200 if blank">
 
   <label>Calories Burned (optional):</label>
-  <input type="number" id="caloriesBurned" placeholder="e.g., 2000">
+  <input type="number" id="caloriesBurned" placeholder="Defaults to 2000 if blank">
 
   <button onclick="addData()">Add Entry</button>
 
@@ -191,13 +191,14 @@
       }
     };
 
+    // Both weight and red projection points set to smaller, identical radius (3)
     const createChartConfig = () => ({
       type: 'line',
       data: {
         labels: [],
         datasets: [
-          { label: 'Weight', data: [], borderColor: 'blue', backgroundColor: 'blue', fill: false, spanGaps: true },
-          { label: 'Next-Day Proj.', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 5, pointStyle: 'circle', fill: false, spanGaps: true }
+          { label: 'Weight', data: [], borderColor: 'blue', backgroundColor: 'blue', pointRadius: 3, fill: false, spanGaps: true },
+          { label: 'Next-Day Proj.', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 3, pointStyle: 'circle', fill: false, spanGaps: true }
         ]
       },
       options: commonChartOptions
@@ -210,9 +211,9 @@
       data: { 
         labels: [], 
         datasets: [
-          { label: 'Actual Weight', data: [], borderColor: 'blue', backgroundColor: 'blue', fill: false, spanGaps: true },
-          { label: 'Next-Day Proj.', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 5, pointStyle: 'circle', fill: false, spanGaps: true },
-          { label: '4-Week Proj. Line', data: [], borderColor: 'orange', borderDash: [5, 5], fill: false, spanGaps: true }
+          { label: 'Actual Weight', data: [], borderColor: 'blue', backgroundColor: 'blue', pointRadius: 3, fill: false, spanGaps: true },
+          { label: 'Next-Day Proj.', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 3, pointStyle: 'circle', fill: false, spanGaps: true },
+          { label: '4-Week Proj. Line', data: [], borderColor: 'orange', borderDash: [5, 5], pointRadius: 0, fill: false, spanGaps: true }
         ] 
       },
       options: commonChartOptions
@@ -244,13 +245,13 @@
       }
 
       calories = calories === "" ? 2200 : parseFloat(calories);
-      caloriesBurned = caloriesBurned === "" ? 0 : parseFloat(caloriesBurned);
+      caloriesBurned = (caloriesBurned === "" || parseFloat(caloriesBurned) === 0) ? 2000 : parseFloat(caloriesBurned);
 
       let existing = entries.find(e => e.date === date);
       if (existing) {
         existing.weight = weight;
         if (calories !== 2200) existing.calories = calories;
-        if (caloriesBurned !== 0) existing.caloriesBurned = caloriesBurned;
+        existing.caloriesBurned = caloriesBurned;
       } else {
         entries.push({ date, weight, calories, caloriesBurned });
       }
@@ -310,9 +311,10 @@
               if (cols.length <= Math.max(dateIdx, totalIdx)) continue;
 
               const standardizedDate = parseDateOnly(cols[dateIdx]);
-              const dailyTotal = parseFloat(cols[totalIdx].replace(/[^0-9.]/g, ''));
+              let dailyTotal = parseFloat(cols[totalIdx].replace(/[^0-9.]/g, ''));
+              if (isNaN(dailyTotal) || dailyTotal === 0) dailyTotal = 2000;
 
-              if (standardizedDate && !isNaN(dailyTotal)) {
+              if (standardizedDate) {
                 let existing = entries.find(e => e.date === standardizedDate);
                 if (existing) {
                   existing.caloriesBurned = Math.round(dailyTotal);
@@ -351,7 +353,7 @@
                     date: standardizedDate,
                     weight: weightVal,
                     calories: 2200,
-                    caloriesBurned: 0
+                    caloriesBurned: 2000 // default burn if not yet imported
                   });
                   addedCount++;
                 } else {
@@ -385,6 +387,11 @@
       let tableHtml = '';
 
       entries.forEach((entry, idx) => {
+        // Enforce 2000 default if caloriesBurned is 0 or missing
+        if (!entry.caloriesBurned || entry.caloriesBurned === 0) {
+          entry.caloriesBurned = 2000;
+        }
+
         let totalNetCal = 0;
         for (let i = 0; i <= idx; i++) {
           let net = entries[i].calories - entries[i].caloriesBurned;
@@ -404,7 +411,6 @@
         </tr>`;
       });
 
-      // Helper function to build chart data where every entry generates its own next-day red projection point
       function updateChartWithContinuousProjections(chartInstance, filteredEntries, include4WkLine = false) {
         let labels = [];
         let weights = [];
@@ -414,7 +420,7 @@
         filteredEntries.forEach((entry, index) => {
           labels.push(formatDateDisplay(entry.date));
           weights.push(entry.weight);
-          projPoints.push(null); // Actual weight slot has no red point
+          projPoints.push(null);
 
           if (entry.weight !== null) {
             let nextDayDate = new Date(entry.date);
@@ -463,36 +469,4 @@
         document.getElementById('proj4Weeks').innerText = latestProj;
 
         document.getElementById('change1Day').innerText = getWindowChange(1);
-        document.getElementById('change3Days').innerText = getWindowChange(3);
-        document.getElementById('change1Week').innerText = getWindowChange(7);
-        document.getElementById('change1Month').innerText = getWindowChange(30);
-      } else {
-        document.getElementById('statsCard').style.display = 'none';
-      }
-    }
-
-    function getWindowChange(days) {
-      if (entries.length === 0) return "0.0";
-      let latestDate = new Date(entries[entries.length - 1].date);
-      let totalNet = 0;
-      let count = 0;
-
-      entries.forEach(e => {
-        let eDate = new Date(e.date);
-        let diffTime = latestDate - eDate;
-        let diffDays = diffTime / (1000 * 3600 * 24);
-        if (diffDays >= 0 && diffDays < days) {
-          totalNet += (e.calories - e.caloriesBurned);
-          count++;
-        }
-      });
-
-      if (count === 0) totalNet = entries[entries.length - 1].calories - entries[entries.length - 1].caloriesBurned;
-      let windowPounds = (totalNet / 3500); 
-      return windowPounds >= 0 ? `+${windowPounds.toFixed(2)}` : windowPounds.toFixed(2);
-    }
-
-    init();
-  </script>
-</body>
-</html>
+        document.getElementById('change3Days').innerText = getWindowChange(
