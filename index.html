@@ -31,7 +31,7 @@
 <body>
   <h2>Weight & Calorie Tracker</h2>
 
-  <!-- CSV File Upload Box -->
+  <!-- Universal File Import Box -->
   <div class="card" style="background: #f0f7ff;">
     <h3 style="margin-top:0;">Import CSV Data</h3>
     
@@ -41,7 +41,8 @@
       <option value="garmin">Garmin Calories CSV</option>
     </select>
 
-    <input type="file" id="csvFile" accept=".csv,.txt">
+    <!-- accept="*" ensures mobile OS never greys out any file -->
+    <input type="file" id="csvFile" accept="*">
     <button class="primary-btn" onclick="handleFileImport()">Import Selected CSV</button>
     <div id="importStatus"></div>
     <button class="danger-outline" onclick="clearAllData()">Clear All Stored Entries</button>
@@ -265,7 +266,7 @@
       const file = fileInput.files[0];
 
       if (!file) {
-        showStatus("Please select a CSV file first.", "error");
+        showStatus("Please select a file first.", "error");
         return;
       }
 
@@ -278,7 +279,7 @@
           const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
           
           if (lines.length < 2) {
-            showStatus("The CSV file appears to be empty or missing rows.", "error");
+            showStatus("The file appears to be empty or missing rows.", "error");
             return;
           }
 
@@ -306,7 +307,6 @@
                   existing.caloriesBurned = Math.round(dailyTotal);
                   addedCount++;
                 } else {
-                  // Create entry with null weight so calorie data is preserved
                   entries.push({
                     date: standardizedDate,
                     weight: null, 
