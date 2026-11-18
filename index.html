@@ -8,11 +8,11 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    body { font-family: sans-serif; padding: 20px; max-width: 650px; margin: auto; }
     input, select, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
     .card { background: #f9f9f9; padding: 15px; margin-top: 15px; border-radius: 8px; border: 1px solid #ddd; }
     .chart-container { position: relative; width: 100%; margin-top: 25px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #eee; }
-    table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
     th, td { border: 1px solid #ddd; padding: 6px; text-align: center; }
     th { background: #f1f1f1; }
     button.delete-btn { background: #ff4d4d; color: white; border: none; padding: 4px 8px; cursor: pointer; border-radius: 4px; width: auto; }
@@ -94,6 +94,7 @@
         <th>Consumed</th>
         <th>Burned</th>
         <th>Proj. Change</th>
+        <th>Actual Change</th>
         <th>Actions</th>
       </tr>
     </thead>
@@ -386,6 +387,7 @@
       let projectedWeights = [];
       let tableHtml = '';
 
+      // Pre-calculate projections
       entries.forEach((entry, idx) => {
         if (!entry.caloriesBurned || entry.caloriesBurned === 0) {
           entry.caloriesBurned = 2000;
@@ -402,19 +404,37 @@
         projectedWeights.push(proj4Wk !== null ? parseFloat(proj4Wk.toFixed(1)) : null);
       });
 
-      // Build history table in reverse order (newest to oldest) with daily projected change
+      // Build history table in reverse order (newest to oldest)
       for (let idx = entries.length - 1; idx >= 0; idx--) {
         let entry = entries[idx];
         let netCal = entry.calories - entry.caloriesBurned;
-        let dailyChange = netCal / 3500;
-        let changeStr = (dailyChange >= 0 ? "+" : "") + dailyChange.toFixed(2);
+        let dailyProjChange = netCal / 3500;
+        let projStr = (dailyProjChange >= 0 ? "+" : "") + dailyProjChange.toFixed(2);
+
+        // Calculate actual change from previous weigh-in
+        let actualStr = "--";
+        if (entry.weight !== null) {
+          // Find previous entry that has a valid weight
+          let prevWeight = null;
+          for (let p = idx - 1; p >= 0; p--) {
+            if (entries[p].weight !== null) {
+              prevWeight = entries[p].weight;
+              break;
+            }
+          }
+          if (prevWeight !== null) {
+            let actualDiff = entry.weight - prevWeight;
+            actualStr = (actualDiff >= 0 ? "+" : "") + actualDiff.toFixed(1);
+          }
+        }
 
         tableHtml += `<tr>
           <td>${formatDateDisplay(entry.date)}</td>
           <td>${entry.weight !== null ? entry.weight : '--'}</td>
           <td>${entry.calories}</td>
           <td>${entry.caloriesBurned}</td>
-          <td style="color: ${dailyChange < 0 ? 'green' : (dailyChange > 0 ? 'red' : 'inherit')}">${changeStr} lbs</td>
+          <td style="color: ${dailyProjChange < 0 ? 'green' : (dailyProjChange > 0 ? 'red' : 'inherit')}">${projStr} lbs</td>
+          <td style="font-weight: bold;">${actualStr}</td>
           <td>
             <button class="edit-btn" onclick="editEntry(${idx})">Edit</button>
             <button class="delete-btn" onclick="deleteEntry(${idx})">Delete</button>
