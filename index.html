@@ -21,8 +21,11 @@
     button.delete-btn:hover { background: #cc0000; }
     button.secondary-btn { background: #6c757d; color: white; border: none; margin-top: 5px; cursor: pointer; }
     button.secondary-btn:hover { background: #5a6268; }
+    button.primary-btn { background: #007bff; color: white; border: none; cursor: pointer; }
+    button.primary-btn:hover { background: #0056b3; }
     button.danger-outline { background: white; color: #cc0000; border: 1px solid #cc0000; margin-top: 8px; cursor: pointer; }
     button.danger-outline:hover { background: #fff0f0; }
+    #importStatus { font-size: 14px; margin-top: 8px; font-weight: bold; padding: 6px; border-radius: 4px; display: none; }
   </style>
 </head>
 <body>
@@ -31,7 +34,9 @@
   <!-- CSV Import Box -->
   <div class="card" style="background: #f0f7ff;">
     <h3 style="margin-top:0;">Import Renpho CSV</h3>
-    <input type="file" id="csvFile" accept=".csv" onchange="importRenphoCSV(event)">
+    <input type="file" id="csvFile" accept=".csv">
+    <button class="primary-btn" onclick="handleImportClick()">Import Selected CSV</button>
+    <div id="importStatus"></div>
     <button class="danger-outline" onclick="clearAllData()">Clear All Stored Entries</button>
   </div>
   
@@ -45,153 +50,4 @@
   <input type="number" id="calories" placeholder="Defaults to 2200 if blank">
 
   <label>Calories Burned (optional):</label>
-  <input type="number" id="caloriesBurned" placeholder="e.g., 2000">
-
-  <button onclick="addData()">Add Entry</button>
-
-  <div class="card" id="statsCard" style="display:none;">
-    <h3>Trend Analysis (Based on Latest Log)</h3>
-    <p><strong>Expected Weight in 4 Weeks:</strong> <span id="proj4Weeks">--</span> lbs</p>
-    <ul>
-      <li><strong>Today's Est. Change:</strong> <span id="change1Day">--</span> lbs</li>
-      <li><strong>Past 3 Days Est. Change:</strong> <span id="change3Days">--</span> lbs</li>
-      <li><strong>Past Week Est. Change:</strong> <span id="change1Week">--</span> lbs</li>
-      <li><strong>Past Month Est. Change:</strong> <span id="change1Month">--</span> lbs</li>
-    </ul>
-  </div>
-
-  <div class="chart-container">
-    <canvas id="chart"></canvas>
-    <button class="secondary-btn" onclick="resetZoom()">Reset Chart Zoom</button>
-  </div>
-
-  <h3>History Log</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Weight</th>
-        <th>Consumed</th>
-        <th>Burned</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody id="historyTableBody"></tbody>
-  </table>
-
-  <script>
-    let entries = JSON.parse(localStorage.getItem('weightData')) || [];
-    
-    function sortEntries() {
-      entries.sort((a, b) => new Date(a.date) - new Date(b.date));
-    }
-
-    // Format YYYY-MM-DD into MMM-DD-YY (e.g., Nov-17-26)
-    function formatDateDisplay(dateStr) {
-      if (!dateStr) return '';
-      const parts = dateStr.split('-');
-      if (parts.length !== 3) return dateStr;
-      
-      const year = parts[0];
-      const monthIndex = parseInt(parts[1], 10) - 1;
-      const day = parts[2].padStart(2, '0');
-
-      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const mmm = months[monthIndex] || "Jan";
-      const yy = year.slice(-2);
-
-      return `${mmm}-${day}-${yy}`;
-    }
-
-    // Parse Renpho "Date Time" formats (e.g. "2025.11.17 08:30:00", "2025-11-17 08:30", "11/17/2025 8:30 AM", "Nov 17, 2025 8:30 AM")
-    function parseRenphoDateTime(rawStr) {
-      if (!rawStr) return '';
-      let clean = rawStr.trim().replace(/^"|"$/g, '');
-
-      // Check for YYYY.MM.DD or YYYY-MM-DD or YYYY/MM/DD at the start
-      let ymdMatch = clean.match(/^(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
-      if (ymdMatch) {
-        return `${ymdMatch[1]}-${ymdMatch[2].padStart(2, '0')}-${ymdMatch[3].padStart(2, '0')}`;
-      }
-
-      // Check for MM/DD/YYYY or MM-DD-YYYY or MM.DD.YYYY
-      let mdyMatch = clean.match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})/);
-      if (mdyMatch) {
-        return `${mdyMatch[3]}-${mdyMatch[1].padStart(2, '0')}-${mdyMatch[2].padStart(2, '0')}`;
-      }
-
-      // Fallback for text dates like "Nov 17, 2025 08:30 AM"
-      let parsed = new Date(clean);
-      if (!isNaN(parsed.getTime())) {
-        let y = parsed.getFullYear();
-        let m = String(parsed.getMonth() + 1).padStart(2, '0');
-        let d = String(parsed.getDate()).padStart(2, '0');
-        return `${y}-${m}-${d}`;
-      }
-
-      return '';
-    }
-
-    // Splits a CSV row safely even if cells contain commas inside quotes (e.g. "Nov 17, 2025 08:00 AM")
-    function splitCSVLine(line, delimiter = ',') {
-      const result = [];
-      let current = '';
-      let inQuotes = false;
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') {
-          inQuotes = !inQuotes;
-        } else if (char === delimiter && !inQuotes) {
-          result.push(current.trim());
-          current = '';
-        } else {
-          current += char;
-        }
-      }
-      result.push(current.trim());
-      return result;
-    }
-
-    const ctx = document.getElementById('chart').getContext('2d');
-    const chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [
-          { label: 'Actual Weight', data: [], borderColor: 'blue', fill: false },
-          { label: '4-Week Proj. Weight', data: [], borderColor: 'red', borderDash: [5, 5], fill: false }
-        ]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          zoom: {
-            zoom: {
-              wheel: { enabled: true },
-              pinch: { enabled: true },
-              mode: 'xy',
-            },
-            pan: {
-              enabled: true,
-              mode: 'xy',
-            }
-          }
-        }
-      }
-    });
-
-    function resetZoom() {
-      chart.resetZoom();
-    }
-
-    function clearAllData() {
-      if (confirm("Are you sure you want to delete all logged entries?")) {
-        entries = [];
-        localStorage.removeItem('weightData');
-        renderAll();
-      }
-    }
-
-    function init() {
-      document.getElementById('date').valueAsDate = new Date();
-      renderAll();
+  <input type="number
