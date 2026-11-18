@@ -385,6 +385,7 @@
       let projectedWeights = [];
       let tableHtml = '';
 
+      // Loop forward to calculate projections
       entries.forEach((entry, idx) => {
         if (!entry.caloriesBurned || entry.caloriesBurned === 0) {
           entry.caloriesBurned = 2000;
@@ -399,7 +400,11 @@
         let weeklyRate = (avgDailyNet / 3500) * 7;
         let proj4Wk = entry.weight !== null ? entry.weight + (weeklyRate * 4) : null;
         projectedWeights.push(proj4Wk !== null ? parseFloat(proj4Wk.toFixed(1)) : null);
+      });
 
+      // Build history table in reverse order (newest to oldest)
+      for (let idx = entries.length - 1; idx >= 0; idx--) {
+        let entry = entries[idx];
         tableHtml += `<tr>
           <td>${formatDateDisplay(entry.date)}</td>
           <td>${entry.weight !== null ? entry.weight : '--'}</td>
@@ -410,7 +415,7 @@
             <button class="delete-btn" onclick="deleteEntry(${idx})">Delete</button>
           </td>
         </tr>`;
-      });
+      }
 
       function updateChartWithContinuousProjections(chartInstance, filteredEntries) {
         let labels = [];
@@ -445,7 +450,6 @@
       // Filter for Past Year
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      const yearEntries = entries.entries ? entries : entries.filter(e => new Date(e.date) >= oneYearAgo);
       updateChartWithContinuousProjections(chartYear, entries.filter(e => new Date(e.date) >= oneYearAgo));
 
       // Filter for Past Month
