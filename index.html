@@ -8,7 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 650px; margin: auto; }
+    body { font-family: sans-serif; padding: 20px; max-width: 700px; margin: auto; }
     input, select, button, textarea { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
     .card { background: #f9f9f9; padding: 15px; margin-top: 15px; border-radius: 8px; border: 1px solid #ddd; }
     .chart-container { position: relative; width: 100%; margin-top: 25px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #eee; }
@@ -29,8 +29,8 @@
     button.danger-outline:hover { background: #fff0f0; }
     #importStatus, #scannerStatus, #dbStatus { font-size: 14px; margin-top: 8px; font-weight: bold; padding: 6px; border-radius: 4px; display: none; }
     
-    #scannerModal, #dbModal, #portionModal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); }
-    .modal-content { background: #fff; margin: 10% auto; padding: 20px; width: 90%; max-width: 500px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); max-height: 80vh; overflow-y: auto; }
+    #scannerModal, #dbModal, #portionModal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); }
+    .modal-content { background: #fff; margin: 10% auto; padding: 20px; width: 90%; max-width: 500px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); max-height: 80vh; overflow-y: auto; z-index: 2100; position: relative; }
     .search-result-item { background: #f1f1f1; padding: 10px; margin: 6px 0; border-radius: 4px; cursor: pointer; font-size: 13px; text-align: left; border: 1px solid #ccc; }
     .search-result-item:hover { background: #e2e6ea; }
     h3.chart-title { margin-bottom: 5px; font-size: 16px; color: #333; }
@@ -56,9 +56,9 @@
     <button class="danger-outline" onclick="clearAllData()">Clear All Stored Entries</button>
   </div>
 
-  <!-- Barcode Scanner & Database Search Box -->
+  <!-- Food Logging Box -->
   <div class="card" style="background: #fdf6f0;">
-    <h3 style="margin-top:0;">🔍 Food Database & Barcode Scanner</h3>
+    <h3 style="margin-top:0;">🥗 Food Logger (Search, Scan, or Manual)</h3>
     
     <label style="font-size: 13px; font-weight: bold;">Search Food Database:</label>
     <div style="display: flex; gap: 6px;">
@@ -70,36 +70,47 @@
     <label style="font-size: 13px; font-weight: bold; margin-top: 10px; display: block;">Barcode Scanner:</label>
     <button class="primary-btn" style="background: #fd7e14;" onclick="startBarcodeScanner()">📷 Scan Barcode via Camera</button>
     <div id="scannerStatus"></div>
-  </div>
-  
-  <!-- Manual Itemized Log Box -->
-  <div class="card" style="background: #f4fdf4;">
-    <h3 style="margin-top:0;">🍽️ Log Food Item & Weight</h3>
-    
-    <label>Date:</label>
-    <input type="date" id="date">
-    
+
+    <hr style="margin: 15px 0; border: 0; border-top: 1px solid #ddd;">
+
+    <h4 style="margin: 0 0 8px 0;">Or Add Manually:</h4>
     <label>Food Item Description:</label>
-    <input type="text" id="foodName" placeholder="e.g., Chewy bar">
+    <input type="text" id="manualFoodName" placeholder="e.g., Chewy bar">
 
     <label>Meal Type:</label>
-    <select id="mealType">
+    <select id="manualMealType">
       <option value="Snack">Snack</option>
       <option value="Breakfast">Breakfast</option>
       <option value="Lunch">Lunch</option>
       <option value="Dinner">Dinner</option>
     </select>
 
-    <label>Calories for this item:</label>
-    <input type="number" id="foodCalories" placeholder="e.g., 150">
+    <label>Calories:</label>
+    <input type="number" id="manualFoodCals" placeholder="e.g., 150">
 
+    <div style="display: flex; gap: 10px;">
+      <div style="flex: 1;"><label style="font-size: 11px;">Protein (g):</label><input type="number" id="manualProtein" step="0.1" value="0"></div>
+      <div style="flex: 1;"><label style="font-size: 11px;">Fat (g):</label><input type="number" id="manualFat" step="0.1" value="0"></div>
+      <div style="flex: 1;"><label style="font-size: 11px;">Carbs (g):</label><input type="number" id="manualCarbs" step="0.1" value="0"></div>
+    </div>
+
+    <button class="primary-btn" style="background: #28a745; margin-top: 10px;" onclick="addManualFoodItem()">Add Food Item to Log</button>
+  </div>
+  
+  <!-- Weight & Calories Burned Log Box -->
+  <div class="card" style="background: #f4fdf4;">
+    <h3 style="margin-top:0;">⚖️ Log Weight & Burned Calories</h3>
+    
+    <label>Date:</label>
+    <input type="date" id="date">
+    
     <label>Weight (lbs) [Optional]:</label>
     <input type="number" step="0.1" id="weight" placeholder="e.g., 150">
 
     <label>Calories Burned (optional):</label>
     <input type="number" id="caloriesBurned" placeholder="Defaults to 2000 if blank">
 
-    <button class="primary-btn" style="background: #28a745;" onclick="addItemEntry()">Save Item & Weight</button>
+    <button class="primary-btn" style="background: #007bff;" onclick="saveWeightAndBurned()">Save Weight & Burned Entry</button>
   </div>
 
   <div class="card" id="statsCard" style="display:none;">
@@ -124,17 +135,29 @@
     <canvas id="chartYear"></canvas>
   </div>
 
-  <!-- Collapsible Section 1: Current Day Food Log -->
+  <!-- Collapsible Section 1: Selected Day Food Log & Macro Pie Chart -->
   <details open>
-    <summary>🥗 Current Day Food Log (<span id="currentDateHeader">--</span>)</summary>
-    <div style="margin-top: 10px;">
+    <summary>🥗 Food Log & Macros for: <span id="currentDateHeader">--</span></summary>
+    <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;">
+      <button class="secondary-btn" style="margin:0; width: auto; padding: 6px 12px;" onclick="changeDay(-1)">◀ Previous Day</button>
+      <button class="secondary-btn" style="margin:0; width: auto; padding: 6px 12px;" onclick="changeDay(1)">Next Day ▶</button>
+    </div>
+
+    <div style="margin-top: 15px;">
       <p style="font-size: 13px; color: #555; margin-bottom: 5px;">Total Consumed Today: <b id="todayTotalCals">0</b> cals</p>
+      
+      <!-- Macro Pie Chart Container -->
+      <div style="max-width: 250px; margin: 15px auto; position: relative;">
+        <canvas id="macroPieChart"></canvas>
+      </div>
+
       <table>
         <thead>
           <tr>
             <th>Meal</th>
             <th>Food Item</th>
-            <th>Calories</th>
+            <th>Cals</th>
+            <th>P / F / C</th>
             <th>Action</th>
           </tr>
         </thead>
@@ -197,19 +220,55 @@
       <label style="font-size: 12px; font-weight: bold;">OR Fraction / Multiplier (e.g. 0.5 or 1/2):</label>
       <input type="text" id="portionMultiplier" value="1" placeholder="e.g. 0.5" oninput="calculatePortionFromMultiplier()">
 
-      <p style="font-size: 14px; margin-top: 10px;"><strong>Calculated Calories: <span id="calculatedItemCals">0</span></strong></p>
+      <p style="font-size: 14px; margin-top: 10px;">
+        <strong>Calculated Calories: <span id="calculatedItemCals">0</span></strong><br>
+        <small style="color: #555;">Protein: <span id="calcP">0</span>g | Fat: <span id="calcF">0</span>g | Carbs: <span id="calcC">0</span>g</small>
+      </p>
 
       <button class="primary-btn" onclick="confirmPortionSelection()">Add to Food Log</button>
       <button class="secondary-btn" onclick="closePortionModal()">Cancel</button>
     </div>
   </div>
 
+  <!-- Edit Food Item Modal -->
+  <div id="editFoodModal" style="display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6);">
+    <div class="modal-content">
+      <h3 style="margin-top:0;">Edit Food Item</h3>
+      <input type="hidden" id="editEntryIdx">
+      <input type="hidden" id="editItemIdx">
+
+      <label>Food Item Name:</label>
+      <input type="text" id="editFoodName">
+
+      <label>Meal Type:</label>
+      <select id="editMealType">
+        <option value="Snack">Snack</option>
+        <option value="Breakfast">Breakfast</option>
+        <option value="Lunch">Lunch</option>
+        <option value="Dinner">Dinner</option>
+      </select>
+
+      <label>Calories:</label>
+      <input type="number" id="editFoodCals">
+
+      <div style="display: flex; gap: 10px;">
+        <div style="flex: 1;"><label style="font-size: 11px;">Protein (g):</label><input type="number" id="editProtein" step="0.1"></div>
+        <div style="flex: 1;"><label style="font-size: 11px;">Fat (g):</label><input type="number" id="editFat" step="0.1"></div>
+        <div style="flex: 1;"><label style="font-size: 11px;">Carbs (g):</label><input type="number" id="editCarbs" step="0.1"></div>
+      </div>
+
+      <button class="primary-btn" onclick="saveEditedFoodItem()" style="margin-top: 10px;">Save Changes</button>
+      <button class="secondary-btn" onclick="closeEditFoodModal()">Cancel</button>
+    </div>
+  </div>
+
   <script>
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
-    let chartMonth, chartYear;
+    let chartMonth, chartYear, macroPieChart = null;
     let videoStream = null;
     let scanningActive = false;
-    let pendingFoodSelection = null; // Stores {name, calsPer100g}
+    let productsCache = [];
+    let pendingFoodSelection = null;
 
     function sortEntries() {
       entries.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -331,8 +390,55 @@
       renderAll();
     }
 
-    function addItemEntry(customItem = null) {
+    function changeDay(days) {
+      const dateInput = document.getElementById('date');
+      if (!dateInput.value) return;
+      let currDate = new Date(dateInput.value);
+      currDate.setDate(currDate.getDate() + days);
+      dateInput.value = currDate.toISOString().split('T')[0];
+      renderAll();
+    }
+
+    function addManualFoodItem() {
       const date = document.getElementById('date').value;
+      const name = document.getElementById('manualFoodName').value.trim();
+      const meal = document.getElementById('manualMealType').value;
+      const calories = parseFloat(document.getElementById('manualFoodCals').value);
+      const protein = parseFloat(document.getElementById('manualProtein').value) || 0;
+      const fat = parseFloat(document.getElementById('manualFat').value) || 0;
+      const carbs = parseFloat(document.getElementById('manualCarbs').value) || 0;
+
+      if (!date || !name || isNaN(calories)) {
+        alert("Please select a date, food name, and calorie amount.");
+        return;
+      }
+
+      let existing = entries.find(e => e.date === date);
+      if (!existing) {
+        existing = { date, weight: null, calories: 2200, caloriesBurned: 2000, items: [] };
+        entries.push(existing);
+      }
+
+      if (!existing.items) existing.items = [];
+      existing.items.push({ name, meal, calories, protein, fat, carbs });
+      existing.calories = existing.items.reduce((sum, i) => sum + i.calories, 0);
+
+      sortEntries();
+      localStorage.setItem('weightData', JSON.stringify(entries));
+      renderAll();
+
+      document.getElementById('manualFoodName').value = '';
+      document.getElementById('manualFoodCals').value = '';
+      document.getElementById('manualProtein').value = '0';
+      document.getElementById('manualFat').value = '0';
+      document.getElementById('manualCarbs').value = '0';
+    }
+
+    function saveWeightAndBurned() {
+      const date = document.getElementById('date').value;
+      const weightVal = document.getElementById('weight').value;
+      const burnedVal = document.getElementById('caloriesBurned').value;
+
       if (!date) {
         alert("Please select a date.");
         return;
@@ -344,41 +450,18 @@
         entries.push(existing);
       }
 
-      const weightVal = document.getElementById('weight').value;
       if (weightVal !== "") existing.weight = parseFloat(weightVal);
-
-      let burnedVal = document.getElementById('caloriesBurned').value;
       if (burnedVal !== "" && parseFloat(burnedVal) !== 0) {
         existing.caloriesBurned = parseFloat(burnedVal);
-      }
-
-      let item = customItem;
-      if (!item) {
-        const foodName = document.getElementById('foodName').value.trim();
-        const mealType = document.getElementById('mealType').value;
-        const foodCals = parseFloat(document.getElementById('foodCalories').value);
-
-        if (foodName && !isNaN(foodCals)) {
-          item = { name: foodName, meal: mealType, calories: foodCals };
-        }
-      }
-
-      if (item) {
-        if (!existing.items) existing.items = [];
-        existing.items.push(item);
-        existing.calories = existing.items.reduce((sum, i) => sum + i.calories, 0);
-      } else if (!existing.items || existing.items.length === 0) {
-        existing.calories = 2200;
       }
 
       sortEntries();
       localStorage.setItem('weightData', JSON.stringify(entries));
       renderAll();
-      
-      document.getElementById('foodName').value = '';
-      document.getElementById('foodCalories').value = '';
+
       document.getElementById('weight').value = '';
       document.getElementById('caloriesBurned').value = '';
+      alert("Weight and burned calories saved successfully!");
     }
 
     function editEntry(index) {
@@ -404,7 +487,48 @@
       renderAll();
     }
 
-    // Open Food Facts Database Search
+    function editItem(entryIndex, itemIndex) {
+      const item = entries[entryIndex].items[itemIndex];
+      document.getElementById('editEntryIdx').value = entryIndex;
+      document.getElementById('editItemIdx').value = itemIndex;
+      document.getElementById('editFoodName').value = item.name;
+      document.getElementById('editMealType').value = item.meal;
+      document.getElementById('editFoodCals').value = item.calories;
+      document.getElementById('editProtein').value = item.protein || 0;
+      document.getElementById('editFat').value = item.fat || 0;
+      document.getElementById('editCarbs').value = item.carbs || 0;
+      document.getElementById('editFoodModal').style.display = 'block';
+    }
+
+    function saveEditedFoodItem() {
+      const eIdx = parseInt(document.getElementById('editEntryIdx').value, 10);
+      const iIdx = parseInt(document.getElementById('editItemIdx').value, 10);
+
+      const name = document.getElementById('editFoodName').value.trim();
+      const meal = document.getElementById('editMealType').value;
+      const calories = parseFloat(document.getElementById('editFoodCals').value) || 0;
+      const protein = parseFloat(document.getElementById('editProtein').value) || 0;
+      const fat = parseFloat(document.getElementById('editFat').value) || 0;
+      const carbs = parseFloat(document.getElementById('editCarbs').value) || 0;
+
+      if (!name) {
+        alert("Food name cannot be empty.");
+        return;
+      }
+
+      entries[eIdx].items[iIdx] = { name, meal, calories, protein, fat, carbs };
+      entries[eIdx].calories = entries[eIdx].items.reduce((sum, i) => sum + i.calories, 0);
+
+      sortEntries();
+      localStorage.setItem('weightData', JSON.stringify(entries));
+      closeEditFoodModal();
+      renderAll();
+    }
+
+    function closeEditFoodModal() {
+      document.getElementById('editFoodModal').style.display = 'none';
+    }
+
     async function searchFoodDatabase() {
       const query = document.getElementById('dbSearchQuery').value.trim();
       if (!query) {
@@ -422,14 +546,19 @@
           return;
         }
 
+        productsCache = data.products;
         let resultsHtml = '';
-        data.products.forEach(prod => {
+        productsCache.forEach((prod, index) => {
           let name = prod.product_name || "Unknown Product";
           let brand = prod.brands ? `(${prod.brands})` : "";
-          let cals = prod.nutriments && (prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) ? Math.round(prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) : 100;
-          
-          resultsHtml += `<div class="search-result-item" onclick="openPortionModal('${name.replace(/'/g, "")} ${brand}', ${cals})">
-            <b>${name}</b> ${brand}<br><small style="color: #555;">Calories per 100g: <b>${cals}</b></small>
+          let nut = prod.nutriments || {};
+          let cals = Math.round(nut['energy-kcal_100g'] || nut['energy-kcal'] || 100);
+          let p = Math.round((nut['proteins_100g'] || nut['proteins'] || 0) * 10) / 10;
+          let f = Math.round((nut['fat_100g'] || nut['fat'] || 0) * 10) / 10;
+          let c = Math.round((nut['carbohydrates_100g'] || nut['carbohydrates'] || 0) * 10) / 10;
+
+          resultsHtml += `<div class="search-result-item" onclick="selectCachedProduct(${index})">
+            <b>${name}</b> ${brand}<br><small style="color: #555;">Per 100g: <b>${cals} cals</b> | P: ${p}g, F: ${f}g, C: ${c}g</small>
           </div>`;
         });
 
@@ -441,17 +570,33 @@
       }
     }
 
+    function selectCachedProduct(index) {
+      const prod = productsCache[index];
+      if (!prod) return;
+      let name = prod.product_name || "Unknown Product";
+      let brand = prod.brands ? `(${prod.brands})` : "";
+      let nut = prod.nutriments || {};
+      let cals = nut['energy-kcal_100g'] || nut['energy-kcal'] || 100;
+      let p = nut['proteins_100g'] || nut['proteins'] || 0;
+      let f = nut['fat_100g'] || nut['fat'] || 0;
+      let c = nut['carbohydrates_100g'] || nut['carbohydrates'] || 0;
+
+      openPortionModal(`${name} ${brand}`.trim(), cals, p, f, c);
+    }
+
     function closeDbModal() {
       document.getElementById('dbModal').style.display = 'none';
     }
 
-    // Portion Scaling Modal Logic
-    function openPortionModal(name, calsPer100g) {
-      pendingFoodSelection = { name, calsPer100g };
+    function openPortionModal(name, calsPer100g, pPer100g, fPer100g, cPer100g) {
+      pendingFoodSelection = { name, calsPer100g, pPer100g, fPer100g, cPer100g };
       document.getElementById('portionFoodTitle').innerText = `Portion for: ${name}`;
       document.getElementById('portionGrams').value = '100';
       document.getElementById('portionMultiplier').value = '1';
-      document.getElementById('calculatedItemCals').innerText = calsPer100g;
+      document.getElementById('calculatedItemCals').innerText = Math.round(calsPer100g);
+      document.getElementById('calcP').innerText = Math.round(pPer100g * 10) / 10;
+      document.getElementById('calcF').innerText = Math.round(fPer100g * 10) / 10;
+      document.getElementById('calcC').innerText = Math.round(cPer100g * 10) / 10;
       
       closeDbModal();
       document.getElementById('portionModal').style.display = 'block';
@@ -474,8 +619,7 @@
       const grams = parseFloat(document.getElementById('portionGrams').value) || 0;
       const multiplier = grams / 100;
       document.getElementById('portionMultiplier').value = multiplier.toFixed(2);
-      const totalCals = Math.round(pendingFoodSelection.calsPer100g * multiplier);
-      document.getElementById('calculatedItemCals').innerText = totalCals;
+      updatePortionCalculations(multiplier);
     }
 
     function calculatePortionFromMultiplier() {
@@ -483,16 +627,45 @@
       const multiplier = evaluateFraction(expr);
       const grams = Math.round(multiplier * 100);
       document.getElementById('portionGrams').value = isNaN(grams) ? '' : grams;
-      const totalCals = Math.round(pendingFoodSelection.calsPer100g * (isNaN(multiplier) ? 1 : multiplier));
+      updatePortionCalculations(isNaN(multiplier) ? 1 : multiplier);
+    }
+
+    function updatePortionCalculations(multiplier) {
+      const sel = pendingFoodSelection;
+      const totalCals = Math.round(sel.calsPer100g * multiplier);
+      const totalP = Math.round((sel.pPer100g * multiplier) * 10) / 10;
+      const totalF = Math.round((sel.fPer100g * multiplier) * 10) / 10;
+      const totalC = Math.round((sel.cPer100g * multiplier) * 10) / 10;
+
       document.getElementById('calculatedItemCals').innerText = totalCals;
+      document.getElementById('calcP').innerText = totalP;
+      document.getElementById('calcF').innerText = totalF;
+      document.getElementById('calcC').innerText = totalC;
     }
 
     function confirmPortionSelection() {
       if (!pendingFoodSelection) return;
       const finalCals = parseInt(document.getElementById('calculatedItemCals').innerText, 10) || 0;
-      const mealType = document.getElementById('mealType').value;
+      const finalP = parseFloat(document.getElementById('calcP').innerText) || 0;
+      const finalF = parseFloat(document.getElementById('calcF').innerText) || 0;
+      const finalC = parseFloat(document.getElementById('calcC').innerText) || 0;
+      const mealType = document.getElementById('manualMealType').value;
 
-      addItemEntry({ name: pendingFoodSelection.name, meal: mealType, calories: finalCals });
+      const date = document.getElementById('date').value;
+      let existing = entries.find(e => e.date === date);
+      if (!existing) {
+        existing = { date, weight: null, calories: 2200, caloriesBurned: 2000, items: [] };
+        entries.push(existing);
+      }
+
+      if (!existing.items) existing.items = [];
+      existing.items.push({ name: pendingFoodSelection.name, meal: mealType, calories: finalCals, protein: finalP, fat: finalF, carbs: finalC });
+      existing.calories = existing.items.reduce((sum, i) => sum + i.calories, 0);
+
+      sortEntries();
+      localStorage.setItem('weightData', JSON.stringify(entries));
+      renderAll();
+
       document.getElementById('portionModal').style.display = 'none';
       pendingFoodSelection = null;
       showStatus("Food item added to log successfully!", "success", "dbStatus");
@@ -503,7 +676,6 @@
       pendingFoodSelection = null;
     }
 
-    // Barcode Scanner Integration
     async function startBarcodeScanner() {
       if (!('BarcodeDetector' in window)) {
         alert("BarcodeDetector API is not supported in this browser. Please use Chrome on Android or a supported browser, or use the Database Search above.");
@@ -532,9 +704,7 @@
               fetchProductByBarcode(code);
               return;
             }
-          } catch (e) {
-            // detection frame skip
-          }
+          } catch (e) {}
           requestAnimationFrame(scanFrame);
         };
         requestAnimationFrame(scanFrame);
@@ -562,9 +732,13 @@
         if (data.status === 1 && data.product) {
           let prod = data.product;
           let name = prod.product_name || "Scanned Barcode Item";
-          let cals = prod.nutriments && (prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) ? Math.round(prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) : 150;
+          let nut = prod.nutriments || {};
+          let cals = nut['energy-kcal_100g'] || nut['energy-kcal'] || 150;
+          let p = nut['proteins_100g'] || nut['proteins'] || 0;
+          let f = nut['fat_100g'] || nut['fat'] || 0;
+          let c = nut['carbohydrates_100g'] || nut['carbohydrates'] || 0;
 
-          openPortionModal(name, cals);
+          openPortionModal(name, cals, p, f, c);
           showStatus("", "info", "scannerStatus");
         } else {
           showStatus("Product not found in database for barcode: " + barcode, "error", "scannerStatus");
@@ -698,6 +872,10 @@
         }
         if (!entry.items) entry.items = [];
 
+        if (entry.items.length > 0) {
+          entry.calories = entry.items.reduce((sum, i) => sum + i.calories, 0);
+        }
+
         let totalNetCal = 0;
         for (let i = 0; i <= idx; i++) {
           let net = entries[i].calories - entries[i].caloriesBurned;
@@ -745,24 +923,40 @@
         </tr>`;
       }
 
-      // Render Current Day Food Log Table
+      // Render Selected Day Food Log Table & Macros Pie Chart
       let todayEntry = entries.find(e => e.date === selectedDate);
       let todayTotalCals = 0;
+      let todayTotalP = 0;
+      let todayTotalF = 0;
+      let todayTotalC = 0;
+
       if (todayEntry && todayEntry.items && todayEntry.items.length > 0) {
         todayEntry.items.forEach((item, iIdx) => {
           todayTotalCals += item.calories;
+          todayTotalP += (item.protein || 0);
+          todayTotalF += (item.fat || 0);
+          todayTotalC += (item.carbs || 0);
+
           todayFoodTableHtml += `<tr>
             <td><b>${item.meal}</b></td>
             <td>${item.name}</td>
-            <td>${item.calories} cals</td>
-            <td><button class="delete-btn" onclick="deleteItem(${entries.indexOf(todayEntry)}, ${iIdx})">Delete</button></td>
+            <td>${item.calories}</td>
+            <td>P:${item.protein || 0}g | F:${item.fat || 0}g | C:${item.carbs || 0}g</td>
+            <td>
+              <button class="edit-btn" onclick="editItem(${entries.indexOf(todayEntry)}, ${iIdx})">Edit</button>
+              <button class="delete-btn" onclick="deleteItem(${entries.indexOf(todayEntry)}, ${iIdx})">Del</button>
+            </td>
           </tr>`;
         });
       } else {
-        todayFoodTableHtml = `<tr><td colspan="4" style="color: #775555;"><i>No food items logged for this date yet.</i></td></tr>`;
+        todayFoodTableHtml = `<tr><td colspan="5" style="color: #775555;"><i>No food items logged for this date yet.</i></td></tr>`;
       }
+
       document.getElementById('todayTotalCals').innerText = todayTotalCals;
       document.getElementById('todayFoodTableBody').innerHTML = todayFoodTableHtml;
+
+      // Update Macro Pie Chart
+      updateMacroPieChart(todayTotalP, todayTotalF, todayTotalC);
 
       function updateChartWithContinuousProjections(chartInstance, filteredEntries) {
         let labels = [];
@@ -807,7 +1001,7 @@
       if (entries.length > 0) {
         document.getElementById('statsCard').style.display = 'block';
         const validProjs = projectedWeights.filter(p => p !== null);
-        const latestProj = validProjs.length > 0 ? validProjs[validProjs.length - 1] -- : '--';
+        const latestProj = validProjs.length > 0 ? validProjs[validProjs.length - 1] : '--';
         document.getElementById('proj4Weeks').innerText = latestProj;
 
         document.getElementById('change1Day').innerText = getWindowChange(1);
@@ -817,6 +1011,37 @@
       } else {
         document.getElementById('statsCard').style.display = 'none';
       }
+    }
+
+    function updateMacroPieChart(p, f, c) {
+      const ctx = document.getElementById('macroPieChart').getContext('2d');
+      const hasData = (p > 0 || f > 0 || c > 0);
+
+      if (macroPieChart) {
+        macroPieChart.data.datasets[0].data = hasData ? [p, f, c] : [1, 1, 1];
+        macroPieChart.options.plugins.tooltip.enabled = hasData;
+        macroPieChart.update();
+        return;
+      }
+
+      macroPieChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Protein (g)', 'Fat (g)', 'Carbs (g)'],
+          datasets: [{
+            data: hasData ? [p, f, c] : [1, 1, 1],
+            backgroundColor: ['#007bff', '#ffc107', '#28a745'],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+            tooltip: { enabled: hasData }
+          }
+        }
+      });
     }
 
     function getWindowChange(days) {
