@@ -17,6 +17,8 @@
     th { background: #f1f1f1; }
     button.delete-btn { background: #ff4d4d; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; width: auto; }
     button.delete-btn:hover { background: #cc0000; }
+    button.edit-btn { background: #ffc107; color: #333; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; width: auto; margin-right: 4px; }
+    button.edit-btn:hover { background: #e0a800; }
     button.secondary-btn { background: #6c757d; color: white; border: none; margin-top: 5px; cursor: pointer; }
     button.secondary-btn:hover { background: #5a6268; }
     button.primary-btn { background: #007bff; color: white; border: none; cursor: pointer; }
@@ -59,7 +61,7 @@
   <label>Calories Burned (optional):</label>
   <input type="number" id="caloriesBurned" placeholder="Defaults to 2000 if blank">
 
-  <button onclick="addData()">Add Entry</button>
+  <button class="primary-btn" onclick="addData()">Save Entry</button>
 
   <div class="card" id="statsCard" style="display:none;">
     <h3>Trend Analysis (Based on Latest Log)</h3>
@@ -72,7 +74,7 @@
     </ul>
   </div>
 
-  <!-- Three Separate Charts -->
+  <!-- Two Charts: Past Month & Past Year -->
   <div class="chart-container">
     <h3 class="chart-title">📊 Past Month View</h3>
     <canvas id="chartMonth"></canvas>
@@ -83,11 +85,6 @@
     <canvas id="chartYear"></canvas>
   </div>
 
-  <div class="chart-container">
-    <h3 class="chart-title">🌐 All-Time View</h3>
-    <canvas id="chartAll"></canvas>
-  </div>
-
   <h3>History Log</h3>
   <table>
     <thead>
@@ -96,7 +93,7 @@
         <th>Weight</th>
         <th>Consumed</th>
         <th>Burned</th>
-        <th>Action</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody id="historyTableBody"></tbody>
@@ -104,7 +101,7 @@
 
   <script>
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
-    let chartMonth, chartYear, chartAll;
+    let chartMonth, chartYear;
 
     function sortEntries() {
       entries.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -208,18 +205,6 @@
 
       chartMonth = new Chart(document.getElementById('chartMonth').getContext('2d'), createConfig());
       chartYear = new Chart(document.getElementById('chartYear').getContext('2d'), createConfig());
-      chartAll = new Chart(document.getElementById('chartAll').getContext('2d'), {
-        type: 'line',
-        data: { 
-          labels: [], 
-          datasets: [
-            { label: 'Actual Weight', data: [], borderColor: 'blue', backgroundColor: 'blue', pointRadius: 3, fill: false, spanGaps: true },
-            { label: 'Next-Day Proj.', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 3, pointStyle: 'circle', fill: false, spanGaps: true },
-            { label: '4-Week Proj. Line', data: [], borderColor: 'orange', borderDash: [5, 5], pointRadius: 0, fill: false, spanGaps: true }
-          ] 
-        },
-        options: commonChartOptions
-      });
     }
 
     function clearAllData() {
@@ -239,22 +224,23 @@
 
     function addData() {
       const date = document.getElementById('date').value;
-      const weight = parseFloat(document.getElementById('weight').value);
+      const weightVal = document.getElementById('weight').value;
       let calories = document.getElementById('calories').value;
       let caloriesBurned = document.getElementById('caloriesBurned').value;
 
-      if (!date || isNaN(weight)) {
-        alert("Please enter a valid date and weight.");
+      if (!date) {
+        alert("Please select a date.");
         return;
       }
 
+      const weight = weightVal === "" ? null : parseFloat(weightVal);
       calories = calories === "" ? 2200 : parseFloat(calories);
       caloriesBurned = (caloriesBurned === "" || parseFloat(caloriesBurned) === 0) ? 2000 : parseFloat(caloriesBurned);
 
       let existing = entries.find(e => e.date === date);
       if (existing) {
         existing.weight = weight;
-        if (calories !== 2200) existing.calories = calories;
+        existing.calories = calories;
         existing.caloriesBurned = caloriesBurned;
       } else {
         entries.push({ date, weight, calories, caloriesBurned });
@@ -267,6 +253,16 @@
       document.getElementById('weight').value = '';
       document.getElementById('calories').value = '';
       document.getElementById('caloriesBurned').value = '';
+      document.getElementById('date').valueAsDate = new Date();
+    }
+
+    function editEntry(index) {
+      const entry = entries[index];
+      document.getElementById('date').value = entry.date;
+      document.getElementById('weight').value = entry.weight !== null ? entry.weight : '';
+      document.getElementById('calories').value = entry.calories;
+      document.getElementById('caloriesBurned').value = entry.caloriesBurned;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function deleteEntry(index) {
@@ -409,11 +405,14 @@
           <td>${entry.weight !== null ? entry.weight : '--'}</td>
           <td>${entry.calories}</td>
           <td>${entry.caloriesBurned}</td>
-          <td><button class="delete-btn" onclick="deleteEntry(${idx})">Delete</button></td>
+          <td>
+            <button class="edit-btn" onclick="editEntry(${idx})">Edit</button>
+            <button class="delete-btn" onclick="deleteEntry(${idx})">Delete</button>
+          </td>
         </tr>`;
       });
 
-      function updateChartWithContinuousProjections(chartInstance, filteredEntries, include4WkLine = false) {
+      function updateChartWithContinuousProjections(chartInstance, filteredEntries) {
         let labels = [];
         let weights = [];
         let projPoints = [];
@@ -440,26 +439,19 @@
         chartInstance.data.labels = labels;
         chartInstance.data.datasets[0].data = weights;
         chartInstance.data.datasets[1].data = projPoints;
-        if (include4WkLine && chartInstance.data.datasets[2]) {
-          chartInstance.data.datasets[2].data = projectedWeights;
-        }
         chartInstance.update();
       }
-
-      // All-Time Chart
-      updateChartWithContinuousProjections(chartAll, entries, true);
 
       // Filter for Past Year
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      const yearEntries = entries.filter(e => new Date(e.date) >= oneYearAgo);
-      updateChartWithContinuousProjections(chartYear, yearEntries, false);
+      const yearEntries = entries.entries ? entries : entries.filter(e => new Date(e.date) >= oneYearAgo);
+      updateChartWithContinuousProjections(chartYear, entries.filter(e => new Date(e.date) >= oneYearAgo));
 
       // Filter for Past Month
       const oneMonthAgo = new Date();
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-      const monthEntries = entries.filter(e => new Date(e.date) >= oneMonthAgo);
-      updateChartWithContinuousProjections(chartMonth, monthEntries, false);
+      updateChartWithContinuousProjections(chartMonth, entries.filter(e => new Date(e.date) >= oneMonthAgo));
 
       document.getElementById('historyTableBody').innerHTML = tableHtml;
 
@@ -499,7 +491,6 @@
       return windowPounds >= 0 ? `+${windowPounds.toFixed(2)}` : windowPounds.toFixed(2);
     }
 
-    // Run initialization on page load
     window.onload = init;
   </script>
 </body>
