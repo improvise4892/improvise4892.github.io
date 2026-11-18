@@ -38,7 +38,7 @@
     <label style="font-size: 13px; font-weight: bold;">Select File Type:</label>
     <select id="importType">
       <option value="renpho">Renpho Weight CSV</option>
-      <option value="garmin">Garmin Daily Calories CSV</option>
+      <option value="garmin">Garmin Calories CSV</option>
     </select>
 
     <input type="file" id="csvFile" accept=".csv,.txt">
@@ -180,8 +180,8 @@
       data: {
         labels: [],
         datasets: [
-          { label: 'Actual Weight', data: [], borderColor: 'blue', fill: false },
-          { label: '4-Week Proj. Weight', data: [], borderColor: 'red', borderDash: [5, 5], fill: false }
+          { label: 'Actual Weight', data: [], borderColor: 'blue', fill: false, spanGaps: true },
+          { label: '4-Week Proj. Weight', data: [], borderColor: 'red', borderDash: [5, 5], fill: false, spanGaps: true }
         ]
       },
       options: {
@@ -234,8 +234,14 @@
       calories = calories === "" ? 2200 : parseFloat(calories);
       caloriesBurned = caloriesBurned === "" ? 0 : parseFloat(caloriesBurned);
 
-      entries = entries.filter(e => e.date !== date);
-      entries.push({ date, weight, calories, caloriesBurned });
+      let existing = entries.find(e => e.date === date);
+      if (existing) {
+        existing.weight = weight;
+        if (calories !== 2200) existing.calories = calories;
+        if (caloriesBurned !== 0) existing.caloriesBurned = caloriesBurned;
+      } else {
+        entries.push({ date, weight, calories, caloriesBurned });
+      }
       
       sortEntries();
       localStorage.setItem('weightData', JSON.stringify(entries));
@@ -300,6 +306,7 @@
                   existing.caloriesBurned = Math.round(dailyTotal);
                   addedCount++;
                 } else {
+                  // Create entry with null weight so calorie data is preserved
                   entries.push({
                     date: standardizedDate,
                     weight: null, 
@@ -310,8 +317,6 @@
                 }
               }
             }
-            // Remove temporary placeholder rows without weights
-            entries = entries.filter(e => e.weight !== null && !isNaN(e.weight));
           } else {
             // Renpho Weight Import
             let dateIdx = headers.findIndex(h => h.includes('date') || h.includes('time'));
@@ -379,12 +384,12 @@
         }
         let avgDailyNet = totalNetCal / (idx + 1);
         let weeklyRate = (avgDailyNet / 3500) * 7;
-        let proj4Wk = entry.weight + (weeklyRate * 4);
-        projectedWeights.push(parseFloat(proj4Wk.toFixed(1)));
+        let proj4Wk = entry.weight !== null ? entry.weight + (weeklyRate * 4) : null;
+        projectedWeights.push(proj4Wk !== null ? parseFloat(proj4Wk.toFixed(1)) : null);
 
         tableHtml += `<tr>
           <td>${formatDateDisplay(entry.date)}</td>
-          <td>${entry.weight}</td>
+          <td>${entry.weight !== null ? entry.weight : '--'}</td>
           <td>${entry.calories}</td>
           <td>${entry.caloriesBurned}</td>
           <td><button class="delete-btn" onclick="deleteEntry(${idx})">Delete</button></td>
@@ -397,7 +402,8 @@
 
       if (entries.length > 0) {
         document.getElementById('statsCard').style.display = 'block';
-        const latestProj = projectedWeights[projectedWeights.length - 1];
+        const validProjs = projectedWeights.filter(p => p !== null);
+        const latestProj = validProjs.length > 0 ? validProjs[validProjs.length - 1] : '--';
         document.getElementById('proj4Weeks').innerText = latestProj;
 
         document.getElementById('change1Day').innerText = getWindowChange(1);
