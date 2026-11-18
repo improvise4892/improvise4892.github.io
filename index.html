@@ -33,7 +33,7 @@
 
   <!-- CSV File Upload Box -->
   <div class="card" style="background: #f0f7ff;">
-    <h3 style="margin-top:0;">Import Renpho CSV File</h3>
+    <h3 style="margin-top:0;">Import CSV (Renpho or Garmin)</h3>
     <input type="file" id="csvFile" accept=".csv,.txt">
     <button class="primary-btn" onclick="handleFileImport()">Import Selected CSV</button>
     <div id="importStatus"></div>
@@ -125,7 +125,7 @@
 
     function parseDateOnly(rawStr) {
       if (!rawStr) return '';
-      let clean = rawStr.trim().replace(/^"|"$/g, '');
+      let clean = rawStr.trim().replace(/^"|"$/g, '').replace(/^\ufeff/, '');
 
       let ymdMatch = clean.match(/^(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
       if (ymdMatch) {
@@ -270,38 +270,75 @@
 
           const headerLine = lines[0];
           const delimiter = headerLine.includes('\t') ? '\t' : (headerLine.includes(';') ? ';' : ',');
-          const headers = splitCSVLine(headerLine, delimiter).map(h => h.toLowerCase().replace(/\s+/g, ' ').trim());
+          const headers = splitCSVLine(headerLine, delimiter).map(h => h.toLowerCase().replace(/\s+/g, ' ').replace(/^\ufeff/, '').trim());
           
-          // Explicitly locate separate Date, Time, and Weight columns
-          let dateIdx = headers.findIndex(h => h === 'date' || h === 'date time');
-          let timeIdx = headers.findIndex(h => h === 'time');
-          let weightIdx = headers.findIndex(h => h.includes('weight') || h.includes('weight(lb)'));
-
-          // Fallbacks if columns aren't named standardly
-          if (dateIdx === -1) dateIdx = 0;
-          if (weightIdx === -1) weightIdx = 2;
+          // Check if this is a Garmin Calories Export (contains 'total' or 'active calories')
+          const isGarminCalories = headers.some(h => h.includes('total') || h.includes('active calories'));
 
           let addedCount = 0;
-          for (let i = 1; i < lines.length; i++) {
-            const cols = splitCSVLine(lines[i], delimiter);
-            if (cols.length <= Math.max(dateIdx, weightIdx)) continue;
 
-            const standardizedDate = parseDateOnly(cols[dateIdx]);
-            const rawWeight = cols[weightIdx].replace(/[^0-9.]/g, '');
-            const weightVal = parseFloat(rawWeight);
+          if (isGarminCalories) {
+            let dateIdx = 0;
+            let totalIdx = headers.findIndex(h => h.includes('total'));
+            if (totalIdx === -1) totalIdx = headers.length - 1;
 
-            if (standardizedDate && !isNaN(weightVal) && weightVal > 0) {
-              let existing = entries.find(e => e.date === standardizedDate);
-              if (!existing) {
-                entries.push({
-                  date: standardizedDate,
-                  weight: weightVal,
-                  calories: 2200,
-                  caloriesBurned: 0
-                });
-                addedCount++;
-              } else {
-                existing.weight = weightVal;
+            for (let i = 1; i < lines.length; i++) {
+              const cols = splitCSVLine(lines[i], delimiter);
+              if (cols.length <= Math.max(dateIdx, totalIdx)) continue;
+
+              const standardizedDate = parseDateOnly(cols[dateIdx]);
+              const weeklyTotal = parseFloat(cols[totalIdx].replace(/[^0-9.]/g, ''));
+
+              if (standardizedDate && !isNaN(weeklyTotal)) {
+                // Garmin CSV gives weekly totals, so divide by 7 for average daily burn
+                const dailyBurn = Math.round(weeklyTotal / 7);
+                let existing = entries.find(e => e.date === standardizedDate);
+                if (existing) {
+                  existing.caloriesBurned = dailyBurn;
+                  addedCount++;
+                } else {
+                  // If date doesn't have a weight log yet, create a placeholder entry with default 2200 consumption
+                  entries.push({
+                    date: standardizedDate,
+                    weight: null, // Will be filtered out or can be updated
+                    calories: 2200,
+                    caloriesBurned: dailyBurn
+                  });
+                  addedCount++;
+                }
+              }
+            }
+            // Clean up any entries that have null weights from calorie-only imports
+            entries = entries.filter(e => e.weight !== null && !isNaN(e.weight));
+          } else {
+            // Standard Renpho Weight CSV Import
+            let dateIdx = headers.findIndex(h => h === 'date' || h === 'date time');
+            let weightIdx = headers.findIndex(h => h.includes('weight') || h.includes('weight(lb)'));
+
+            if (dateIdx === -1) dateIdx = 0;
+            if (weightIdx === -1) weightIdx = 2;
+
+            for (let i = 1; i < lines.length; i++) {
+              const cols = splitCSVLine(lines[i], delimiter);
+              if (cols.length <= Math.max(dateIdx, weightIdx)) continue;
+
+              const standardizedDate = parseDateOnly(cols[dateIdx]);
+              const rawWeight = cols[weightIdx].replace(/[^0-9.]/g, '');
+              const weightVal = parseFloat(rawWeight);
+
+              if (standardizedDate && !isNaN(weightVal) && weightVal > 0) {
+                let existing = entries.find(e => e.date === standardizedDate);
+                if (!existing) {
+                  entries.push({
+                    date: standardizedDate,
+                    weight: weightVal,
+                    calories: 2200,
+                    caloriesBurned: 0
+                  });
+                  addedCount++;
+                } else {
+                  existing.weight = weightVal;
+                }
               }
             }
           }
@@ -310,7 +347,7 @@
           localStorage.setItem('weightData', JSON.stringify(entries));
           renderAll();
           fileInput.value = '';
-          showStatus(`Success! Imported or updated ${addedCount} entries.`, "success");
+          showStatus(`Success! Imported/updated ${addedCount} entries from CSV.`, "success");
         } catch (err) {
           showStatus("Error parsing file: " + err.message, "error");
         }
