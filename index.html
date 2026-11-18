@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Weight & Calorie Tracker</title>
-  <!-- Chart.js and Zoom Plugin -->
+  <!-- Chart.js, Hammer.js, and Zoom Plugin -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/hammerjs/2.0.8/hammer.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
@@ -13,7 +13,6 @@
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
     input, select, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
     .card { background: #f9f9f9; padding: 15px; margin-top: 15px; border-radius: 8px; border: 1px solid #ddd; }
-    /* touch-action: none prevents the phone from scrolling the page when you touch the chart to pan/zoom */
     .chart-container { position: relative; width: 100%; margin-top: 20px; touch-action: none; }
     table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
@@ -190,20 +189,21 @@
         plugins: {
           zoom: {
             zoom: {
-              wheel: { enabled: true },
+              wheel: { enabled: true, speed: 0.1 },
               pinch: { enabled: true },
-              mode: 'x', // Zoom horizontally across dates
+              mode: 'x',
             },
             pan: {
               enabled: true,
-              mode: 'x', // Pan/drag left and right across dates smoothly
+              mode: 'x',
+              threshold: 10,
             }
           }
         },
         scales: {
           x: {
             ticks: {
-              maxTicksLimit: 8 // Prevents date labels from crowding when zooming in
+              maxTicksLimit: 8
             }
           }
         }
