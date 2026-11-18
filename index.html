@@ -184,7 +184,6 @@
       return result;
     }
 
-    // Initialize 3 separate charts
     const commonChartOptions = {
       responsive: true,
       scales: {
@@ -275,7 +274,7 @@
       const file = fileInput.files[0];
 
       if (!file) {
-        showStatus("Please select a file first.", "error");
+        showStatus("Please select a CSV file first.", "error");
         return;
       }
 
@@ -288,7 +287,7 @@
           const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
           
           if (lines.length < 2) {
-            showStatus("The file appears to be empty or missing rows.", "error");
+            showStatus("The CSV file is empty or missing rows.", "error");
             return;
           }
 
@@ -331,4 +330,138 @@
             let dateIdx = headers.findIndex(h => h.includes('date') || h.includes('time'));
             let weightIdx = headers.findIndex(h => h.includes('weight'));
 
-            if (dateIdx
+            if (dateIdx === -1) dateIdx = 0;
+            if (weightIdx === -1) weightIdx = 1;
+
+            for (let i = 1; i < lines.length; i++) {
+              const cols = splitCSVLine(lines[i], delimiter);
+              if (cols.length <= Math.max(dateIdx, weightIdx)) continue;
+
+              const standardizedDate = parseDateOnly(cols[dateIdx]);
+              const rawWeight = cols[weightIdx].replace(/[^0-9.]/g, '');
+              const weightVal = parseFloat(rawWeight);
+
+              if (standardizedDate && !isNaN(weightVal) && weightVal > 0) {
+                let existing = entries.find(e => e.date === standardizedDate);
+                if (!existing) {
+                  entries.push({
+                    date: standardizedDate,
+                    weight: weightVal,
+                    calories: 2200,
+                    caloriesBurned: 0
+                  });
+                  addedCount++;
+                } else {
+                  existing.weight = weightVal;
+                }
+              }
+            }
+          }
+
+          sortEntries();
+          localStorage.setItem('weightData', JSON.stringify(entries));
+          renderAll();
+          fileInput.value = '';
+          showStatus(`Success! Imported/updated ${addedCount} entries.`, "success");
+        } catch (err) {
+          showStatus("Error parsing file: " + err.message, "error");
+        }
+      };
+
+      reader.onerror = function() {
+        showStatus("Failed to read file.", "error");
+      };
+
+      reader.readAsText(file);
+    }
+
+    function renderAll() {
+      sortEntries();
+      
+      let projectedWeights = [];
+      let tableHtml = '';
+
+      entries.forEach((entry, idx) => {
+        let totalNetCal = 0;
+        for (let i = 0; i <= idx; i++) {
+          let net = entries[i].calories - entries[i].caloriesBurned;
+          totalNetCal += net;
+        }
+        let avgDailyNet = totalNetCal / (idx + 1);
+        let weeklyRate = (avgDailyNet / 3500) * 7;
+        let proj4Wk = entry.weight !== null ? entry.weight + (weeklyRate * 4) : null;
+        projectedWeights.push(proj4Wk !== null ? parseFloat(proj4Wk.toFixed(1)) : null);
+
+        tableHtml += `<tr>
+          <td>${formatDateDisplay(entry.date)}</td>
+          <td>${entry.weight !== null ? entry.weight : '--'}</td>
+          <td>${entry.calories}</td>
+          <td>${entry.caloriesBurned}</td>
+          <td><button class="delete-btn" onclick="deleteEntry(${idx})">Delete</button></td>
+        </tr>`;
+      });
+
+      // All-Time Chart
+      chartAll.data.labels = entries.map(e => formatDateDisplay(e.date));
+      chartAll.data.datasets[0].data = entries.map(e => e.weight);
+      chartAll.data.datasets[1].data = projectedWeights;
+      chartAll.update();
+
+      // Filter for Past Year
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      const yearEntries = entries.filter(e => new Date(e.date) >= oneYearAgo);
+      chartYear.data.labels = yearEntries.map(e => formatDateDisplay(e.date));
+      chartYear.data.datasets[0].data = yearEntries.map(e => e.weight);
+      chartYear.update();
+
+      // Filter for Past Month
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+      const monthEntries = entries.filter(e => new Date(e.date) >= oneMonthAgo);
+      chartMonth.data.labels = monthEntries.map(e => formatDateDisplay(e.date));
+      chartMonth.data.datasets[0].data = monthEntries.map(e => e.weight);
+      chartMonth.update();
+
+      document.getElementById('historyTableBody').innerHTML = tableHtml;
+
+      if (entries.length > 0) {
+        document.getElementById('statsCard').style.display = 'block';
+        const validProjs = projectedWeights.filter(p => p !== null);
+        const latestProj = validProjs.length > 0 ? validProjs[validProjs.length - 1] : '--';
+        document.getElementById('proj4Weeks').innerText = latestProj;
+
+        document.getElementById('change1Day').innerText = getWindowChange(1);
+        document.getElementById('change3Days').innerText = getWindowChange(3);
+        document.getElementById('change1Week').innerText = getWindowChange(7);
+        document.getElementById('change1Month').innerText = getWindowChange(30);
+      } else {
+        document.getElementById('statsCard').style.display = 'none';
+      }
+    }
+
+    function getWindowChange(days) {
+      if (entries.length === 0) return "0.0";
+      let latestDate = new Date(entries[entries.length - 1].date);
+      let totalNet = 0;
+      let count = 0;
+
+      entries.forEach(e => {
+        let eDate = new Date(e.date);
+        let diffTime = latestDate - eDate;
+        let diffDays = diffTime / (1000 * 3600 * 24);
+        if (diffDays >= 0 && diffDays < days) {
+          totalNet += (e.calories - e.caloriesBurned);
+          count++;
+        }
+      });
+
+      if (count === 0) totalNet = entries[entries.length - 1].calories - entries[entries.length - 1].caloriesBurned;
+      let windowPounds = (totalNet / 3500); 
+      return windowPounds >= 0 ? `+${windowPounds.toFixed(2)}` : windowPounds.toFixed(2);
+    }
+
+    init();
+  </script>
+</body>
+</html>
