@@ -11,8 +11,7 @@
   
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    input, textarea, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
-    textarea { height: 100px; font-family: monospace; font-size: 12px; }
+    input, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
     .card { background: #f9f9f9; padding: 15px; margin-top: 15px; border-radius: 8px; border: 1px solid #ddd; }
     .chart-container { position: relative; width: 100%; margin-top: 20px; }
     table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
@@ -32,12 +31,11 @@
 <body>
   <h2>Weight & Calorie Tracker</h2>
 
-  <!-- CSV / Google Sheets Paste Box -->
+  <!-- CSV File Upload Box -->
   <div class="card" style="background: #f0f7ff;">
-    <h3 style="margin-top:0;">Import Renpho Data</h3>
-    <p style="font-size: 13px; color: #555; margin-bottom: 5px;">Copy your rows from Google Sheets (including the <code>Date Time</code> and <code>Weight(lb)</code> headers) and paste them below:</p>
-    <textarea id="csvPasteArea" placeholder="Date Time&#9;Weight(lb)&#10;2025-11-17 08:00:00&#9;165.4"></textarea>
-    <button class="primary-btn" onclick="handlePasteImport()">Process & Import Data</button>
+    <h3 style="margin-top:0;">Import Renpho CSV File</h3>
+    <input type="file" id="csvFile" accept=".csv,.txt">
+    <button class="primary-btn" onclick="handleFileImport()">Import Selected CSV</button>
     <div id="importStatus"></div>
     <button class="danger-outline" onclick="clearAllData()">Clear All Stored Entries</button>
   </div>
@@ -125,7 +123,7 @@
       return `${mmm}-${day}-${yy}`;
     }
 
-    function parseRenphoDateTime(rawStr) {
+    function parseDateOnly(rawStr) {
       if (!rawStr) return '';
       let clean = rawStr.trim().replace(/^"|"$/g, '');
 
@@ -248,64 +246,81 @@
       renderAll();
     }
 
-    function handlePasteImport() {
-      const pasteText = document.getElementById('csvPasteArea').value;
-      if (!pasteText.trim()) {
-        showStatus("Please paste your data into the box first.", "error");
+    function handleFileImport() {
+      const fileInput = document.getElementById('csvFile');
+      const file = fileInput.files[0];
+
+      if (!file) {
+        showStatus("Please select a CSV file first.", "error");
         return;
       }
 
-      try {
-        const lines = pasteText.split(/\r?\n/).filter(l => l.trim() !== '');
-        if (lines.length < 2) {
-          showStatus("The pasted text appears to be empty or missing rows.", "error");
-          return;
-        }
+      showStatus("Reading file...", "info");
 
-        const headerLine = lines[0];
-        // Automatically detects tabs (from Google Sheets), semicolons, or commas
-        const delimiter = headerLine.includes('\t') ? '\t' : (headerLine.includes(';') ? ';' : ',');
-        const headers = splitCSVLine(headerLine, delimiter).map(h => h.toLowerCase().replace(/\s+/g, ' ').trim());
-        
-        let dateIdx = headers.findIndex(h => h === 'date time' || h.includes('date') || h.includes('time'));
-        let weightIdx = headers.findIndex(h => h === 'weight(lb)' || h.includes('weight'));
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const text = e.target.result;
+          const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+          
+          if (lines.length < 2) {
+            showStatus("The CSV file appears to be empty or missing rows.", "error");
+            return;
+          }
 
-        if (dateIdx === -1) dateIdx = 0;
-        if (weightIdx === -1) weightIdx = 1;
+          const headerLine = lines[0];
+          const delimiter = headerLine.includes('\t') ? '\t' : (headerLine.includes(';') ? ';' : ',');
+          const headers = splitCSVLine(headerLine, delimiter).map(h => h.toLowerCase().replace(/\s+/g, ' ').trim());
+          
+          // Explicitly locate separate Date, Time, and Weight columns
+          let dateIdx = headers.findIndex(h => h === 'date' || h === 'date time');
+          let timeIdx = headers.findIndex(h => h === 'time');
+          let weightIdx = headers.findIndex(h => h.includes('weight') || h.includes('weight(lb)'));
 
-        let addedCount = 0;
-        for (let i = 1; i < lines.length; i++) {
-          const cols = splitCSVLine(lines[i], delimiter);
-          if (cols.length <= Math.max(dateIdx, weightIdx)) continue;
+          // Fallbacks if columns aren't named standardly
+          if (dateIdx === -1) dateIdx = 0;
+          if (weightIdx === -1) weightIdx = 2;
 
-          const standardizedDate = parseRenphoDateTime(cols[dateIdx]);
-          const rawWeight = cols[weightIdx].replace(/[^0-9.]/g, '');
-          const weightVal = parseFloat(rawWeight);
+          let addedCount = 0;
+          for (let i = 1; i < lines.length; i++) {
+            const cols = splitCSVLine(lines[i], delimiter);
+            if (cols.length <= Math.max(dateIdx, weightIdx)) continue;
 
-          if (standardizedDate && !isNaN(weightVal) && weightVal > 0) {
-            let existing = entries.find(e => e.date === standardizedDate);
-            if (!existing) {
-              entries.push({
-                date: standardizedDate,
-                weight: weightVal,
-                calories: 2200,
-                caloriesBurned: 0
-              });
-              addedCount++;
-            } else {
-              existing.weight = weightVal;
+            const standardizedDate = parseDateOnly(cols[dateIdx]);
+            const rawWeight = cols[weightIdx].replace(/[^0-9.]/g, '');
+            const weightVal = parseFloat(rawWeight);
+
+            if (standardizedDate && !isNaN(weightVal) && weightVal > 0) {
+              let existing = entries.find(e => e.date === standardizedDate);
+              if (!existing) {
+                entries.push({
+                  date: standardizedDate,
+                  weight: weightVal,
+                  calories: 2200,
+                  caloriesBurned: 0
+                });
+                addedCount++;
+              } else {
+                existing.weight = weightVal;
+              }
             }
           }
-        }
 
-        sortEntries();
-        localStorage.setItem('weightData', JSON.stringify(entries));
-        renderAll();
-        document.getElementById('csvPasteArea').value = '';
-        showStatus(`Success! Imported or updated ${addedCount} entries.`, "success");
-      } catch (err) {
-        showStatus("Error parsing data: " + err.message, "error");
-      }
+          sortEntries();
+          localStorage.setItem('weightData', JSON.stringify(entries));
+          renderAll();
+          fileInput.value = '';
+          showStatus(`Success! Imported or updated ${addedCount} entries.`, "success");
+        } catch (err) {
+          showStatus("Error parsing file: " + err.message, "error");
+        }
+      };
+
+      reader.onerror = function() {
+        showStatus("Failed to read file.", "error");
+      };
+
+      reader.readAsText(file);
     }
 
     function renderAll() {
