@@ -191,25 +191,29 @@
       }
     };
 
-    const chartMonth = new Chart(document.getElementById('chartMonth').getContext('2d'), {
+    // Chart initializations with dual datasets (Weight line + Next-Day Red Projection Point)
+    const createChartConfig = (labelName) => ({
       type: 'line',
-      data: { labels: [], datasets: [{ label: 'Weight', data: [], borderColor: 'blue', fill: false, spanGaps: true }] },
+      data: {
+        labels: [],
+        datasets: [
+          { label: labelName, data: [], borderColor: 'blue', backgroundColor: 'blue', fill: false, spanGaps: true },
+          { label: 'Next-Day Proj.', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 6, pointStyle: 'circle', showLine: false }
+        ]
+      },
       options: commonChartOptions
     });
 
-    const chartYear = new Chart(document.getElementById('chartYear').getContext('2d'), {
-      type: 'line',
-      data: { labels: [], datasets: [{ label: 'Weight', data: [], borderColor: 'blue', fill: false, spanGaps: true }] },
-      options: commonChartOptions
-    });
-
+    const chartMonth = new Chart(document.getElementById('chartMonth').getContext('2d'), createChartConfig('Weight'));
+    const chartYear = new Chart(document.getElementById('chartYear').getContext('2d'), createChartConfig('Weight'));
     const chartAll = new Chart(document.getElementById('chartAll').getContext('2d'), {
       type: 'line',
       data: { 
         labels: [], 
         datasets: [
-          { label: 'Actual Weight', data: [], borderColor: 'blue', fill: false, spanGaps: true },
-          { label: '4-Week Proj.', data: [], borderColor: 'red', borderDash: [5, 5], fill: false, spanGaps: true }
+          { label: 'Actual Weight', data: [], borderColor: 'blue', backgroundColor: 'blue', fill: false, spanGaps: true },
+          { label: 'Next-Day Proj.', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 6, pointStyle: 'circle', showLine: false },
+          { label: '4-Week Proj. Line', data: [], borderColor: 'orange', borderDash: [5, 5], fill: false, spanGaps: true }
         ] 
       },
       options: commonChartOptions
@@ -401,27 +405,65 @@
         </tr>`;
       });
 
+      // Calculate next-day projection based on the latest entry
+      let nextDayLabel = "";
+      let nextDayWeightVal = null;
+      if (entries.length > 0) {
+        const latest = entries[entries.length - 1];
+        if (latest.weight !== null) {
+          let lastDateObj = new Date(latest.date);
+          lastDateObj.setDate(lastDateObj.getDate() + 1);
+          nextDayLabel = formatDateDisplay(lastDateObj.toISOString().split('T')[0]);
+          
+          let netCal = latest.calories - latest.caloriesBurned;
+          let dailyDelta = netCal / 3500;
+          nextDayWeightVal = parseFloat((latest.weight + dailyDelta).toFixed(1));
+        }
+      }
+
+      // Helper function to populate chart data with next-day red point
+      function updateChartWithNextDay(chartInstance, filteredEntries, include4WkLine = false) {
+        let labels = filteredEntries.map(e => formatDateDisplay(e.date));
+        let weights = filteredEntries.map(e => e.weight);
+        let projPoints = new Array(filteredEntries.length).fill(null);
+        let proj4WkPoints = new Array(filteredEntries.length).fill(null);
+
+        if (nextDayWeightVal !== null && filteredEntries.length > 0) {
+          // Check if latest entry is in this filtered set
+          let latestInFilter = filteredEntries[filteredEntries.length - 1].date === entries[entries.length - 1].date;
+          if (latestInFilter) {
+            labels.push(nextDayLabel + " (Proj)");
+            weights.push(null);
+            projPoints.push(nextDayWeightVal);
+            if (include4WkLine) {
+              proj4WkPoints.push(projectedWeights[projectedWeights.length - 1]);
+            }
+          }
+        }
+
+        chartInstance.data.labels = labels;
+        chartInstance.data.datasets[0].data = weights;
+        chartInstance.data.datasets[1].data = projPoints;
+        if (include4WkLine && chartInstance.data.datasets[2]) {
+          chartInstance.data.datasets[2].data = projectedWeights;
+        }
+        chartInstance.update();
+      }
+
       // All-Time Chart
-      chartAll.data.labels = entries.map(e => formatDateDisplay(e.date));
-      chartAll.data.datasets[0].data = entries.map(e => e.weight);
-      chartAll.data.datasets[1].data = projectedWeights;
-      chartAll.update();
+      updateChartWithNextDay(chartAll, entries, true);
 
       // Filter for Past Year
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
       const yearEntries = entries.filter(e => new Date(e.date) >= oneYearAgo);
-      chartYear.data.labels = yearEntries.map(e => formatDateDisplay(e.date));
-      chartYear.data.datasets[0].data = yearEntries.map(e => e.weight);
-      chartYear.update();
+      updateChartWithNextDay(chartYear, yearEntries, false);
 
       // Filter for Past Month
       const oneMonthAgo = new Date();
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
       const monthEntries = entries.filter(e => new Date(e.date) >= oneMonthAgo);
-      chartMonth.data.labels = monthEntries.map(e => formatDateDisplay(e.date));
-      chartMonth.data.datasets[0].data = monthEntries.map(e => e.weight);
-      chartMonth.update();
+      updateChartWithNextDay(chartMonth, monthEntries, false);
 
       document.getElementById('historyTableBody').innerHTML = tableHtml;
 
