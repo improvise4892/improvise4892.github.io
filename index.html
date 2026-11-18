@@ -1019,6 +1019,7 @@
 
       if (macroPieChart) {
         macroPieChart.data.datasets[0].data = hasData ? [p, f, c] : [1, 1, 1];
+        macroPieChart.data.datasets[0].backgroundColor = hasData ? ['#007bff', '#ffc107', '#28a745'] : ['#e0e3e5', '#e0e3e5', '#e0e3e5'];
         macroPieChart.options.plugins.tooltip.enabled = hasData;
         macroPieChart.update();
         return;
@@ -1027,10 +1028,10 @@
       macroPieChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: ['Protein (g)', 'Fat (g)', 'Carbs (g)'],
+          labels: hasData ? ['Protein (g)', 'Fat (g)', 'Carbs (g)'] : ['No Macros Logged'],
           datasets: [{
             data: hasData ? [p, f, c] : [1, 1, 1],
-            backgroundColor: ['#007bff', '#ffc107', '#28a745'],
+            backgroundColor: hasData ? ['#007bff', '#ffc107', '#28a745'] : ['#e0e3e5', '#e0e3e5', '#e0e3e5'],
             borderWidth: 1
           }]
         },
