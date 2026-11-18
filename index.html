@@ -29,9 +29,9 @@
     button.danger-outline:hover { background: #fff0f0; }
     #importStatus, #scannerStatus, #dbStatus { font-size: 14px; margin-top: 8px; font-weight: bold; padding: 6px; border-radius: 4px; display: none; }
     
-    #scannerModal, #dbModal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); }
-    .modal-content { background: #fff; margin: 10% auto; padding: 20px; width: 90%; max-width: 500px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
-    .search-result-item { background: #f1f1f1; padding: 8px; margin: 4px 0; border-radius: 4px; cursor: pointer; font-size: 13px; text-align: left; }
+    #scannerModal, #dbModal, #portionModal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); }
+    .modal-content { background: #fff; margin: 10% auto; padding: 20px; width: 90%; max-width: 500px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); max-height: 80vh; overflow-y: auto; }
+    .search-result-item { background: #f1f1f1; padding: 10px; margin: 6px 0; border-radius: 4px; cursor: pointer; font-size: 13px; text-align: left; border: 1px solid #ccc; }
     .search-result-item:hover { background: #e2e6ea; }
     h3.chart-title { margin-bottom: 5px; font-size: 16px; color: #333; }
   </style>
@@ -180,8 +180,27 @@
   <div id="dbModal">
     <div class="modal-content">
       <h3 style="margin-top:0;">Select Food from Database</h3>
-      <div id="dbSearchResults" style="max-height: 300px; overflow-y: auto;"></div>
+      <div id="dbSearchResults" style="max-height: 400px; overflow-y: auto;"></div>
       <button class="secondary-btn" onclick="closeDbModal()" style="margin-top: 10px;">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Portion / Gram Scaling Modal -->
+  <div id="portionModal">
+    <div class="modal-content">
+      <h3 style="margin-top:0;" id="portionFoodTitle">Adjust Portion</h3>
+      <p style="font-size: 13px; color: #666;">Database nutritional values are per 100g. Enter how many grams you ate OR a fraction/multiplier.</p>
+      
+      <label style="font-size: 12px; font-weight: bold;">Amount in Grams (e.g. 150):</label>
+      <input type="number" id="portionGrams" placeholder="e.g. 150" oninput="calculatePortionFromGrams()">
+
+      <label style="font-size: 12px; font-weight: bold;">OR Fraction / Multiplier (e.g. 0.5 or 1/2):</label>
+      <input type="text" id="portionMultiplier" value="1" placeholder="e.g. 0.5" oninput="calculatePortionFromMultiplier()">
+
+      <p style="font-size: 14px; margin-top: 10px;"><strong>Calculated Calories: <span id="calculatedItemCals">0</span></strong></p>
+
+      <button class="primary-btn" onclick="confirmPortionSelection()">Add to Food Log</button>
+      <button class="secondary-btn" onclick="closePortionModal()">Cancel</button>
     </div>
   </div>
 
@@ -190,6 +209,7 @@
     let chartMonth, chartYear;
     let videoStream = null;
     let scanningActive = false;
+    let pendingFoodSelection = null; // Stores {name, calsPer100g}
 
     function sortEntries() {
       entries.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -394,7 +414,7 @@
 
       showStatus("Searching Open Food Facts database...", "info", "dbStatus");
       try {
-        const response = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10`);
+        const response = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20`);
         const data = await response.json();
 
         if (!data.products || data.products.length === 0) {
@@ -406,10 +426,10 @@
         data.products.forEach(prod => {
           let name = prod.product_name || "Unknown Product";
           let brand = prod.brands ? `(${prod.brands})` : "";
-          let cals = prod.nutriments && (prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) ? Math.round(prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) : "Unknown";
+          let cals = prod.nutriments && (prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) ? Math.round(prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) : 100;
           
-          resultsHtml += `<div class="search-result-item" onclick="selectDbFood('${name.replace(/'/g, "")} ${brand}', ${cals})">
-            <b>${name}</b> ${brand}<br><small style="color: #666;">Calories per 100g / serving: ${cals}</small>
+          resultsHtml += `<div class="search-result-item" onclick="openPortionModal('${name.replace(/'/g, "")} ${brand}', ${cals})">
+            <b>${name}</b> ${brand}<br><small style="color: #555;">Calories per 100g: <b>${cals}</b></small>
           </div>`;
         });
 
@@ -421,15 +441,66 @@
       }
     }
 
-    function selectDbFood(name, cals) {
-      document.getElementById('foodName').value = name;
-      document.getElementById('foodCalories').value = isNaN(cals) ? 100 : cals;
-      closeDbModal();
-      showStatus("Food selected and loaded into form!", "success", "dbStatus");
-    }
-
     function closeDbModal() {
       document.getElementById('dbModal').style.display = 'none';
+    }
+
+    // Portion Scaling Modal Logic
+    function openPortionModal(name, calsPer100g) {
+      pendingFoodSelection = { name, calsPer100g };
+      document.getElementById('portionFoodTitle').innerText = `Portion for: ${name}`;
+      document.getElementById('portionGrams').value = '100';
+      document.getElementById('portionMultiplier').value = '1';
+      document.getElementById('calculatedItemCals').innerText = calsPer100g;
+      
+      closeDbModal();
+      document.getElementById('portionModal').style.display = 'block';
+    }
+
+    function evaluateFraction(expr) {
+      try {
+        if (!expr) return 1;
+        if (expr.includes('/')) {
+          let parts = expr.split('/');
+          return parseFloat(parts[0]) / parseFloat(parts[1]);
+        }
+        return parseFloat(expr);
+      } catch {
+        return 1;
+      }
+    }
+
+    function calculatePortionFromGrams() {
+      const grams = parseFloat(document.getElementById('portionGrams').value) || 0;
+      const multiplier = grams / 100;
+      document.getElementById('portionMultiplier').value = multiplier.toFixed(2);
+      const totalCals = Math.round(pendingFoodSelection.calsPer100g * multiplier);
+      document.getElementById('calculatedItemCals').innerText = totalCals;
+    }
+
+    function calculatePortionFromMultiplier() {
+      const expr = document.getElementById('portionMultiplier').value.trim();
+      const multiplier = evaluateFraction(expr);
+      const grams = Math.round(multiplier * 100);
+      document.getElementById('portionGrams').value = isNaN(grams) ? '' : grams;
+      const totalCals = Math.round(pendingFoodSelection.calsPer100g * (isNaN(multiplier) ? 1 : multiplier));
+      document.getElementById('calculatedItemCals').innerText = totalCals;
+    }
+
+    function confirmPortionSelection() {
+      if (!pendingFoodSelection) return;
+      const finalCals = parseInt(document.getElementById('calculatedItemCals').innerText, 10) || 0;
+      const mealType = document.getElementById('mealType').value;
+
+      addItemEntry({ name: pendingFoodSelection.name, meal: mealType, calories: finalCals });
+      document.getElementById('portionModal').style.display = 'none';
+      pendingFoodSelection = null;
+      showStatus("Food item added to log successfully!", "success", "dbStatus");
+    }
+
+    function closePortionModal() {
+      document.getElementById('portionModal').style.display = 'none';
+      pendingFoodSelection = null;
     }
 
     // Barcode Scanner Integration
@@ -493,9 +564,8 @@
           let name = prod.product_name || "Scanned Barcode Item";
           let cals = prod.nutriments && (prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) ? Math.round(prod.nutriments['energy-kcal_100g'] || prod.nutriments['energy-kcal']) : 150;
 
-          document.getElementById('foodName').value = name;
-          document.getElementById('foodCalories').value = cals;
-          showStatus(`Successfully loaded ${name} (${cals} cals)!`, "success", "scannerStatus");
+          openPortionModal(name, cals);
+          showStatus("", "info", "scannerStatus");
         } else {
           showStatus("Product not found in database for barcode: " + barcode, "error", "scannerStatus");
         }
@@ -737,7 +807,7 @@
       if (entries.length > 0) {
         document.getElementById('statsCard').style.display = 'block';
         const validProjs = projectedWeights.filter(p => p !== null);
-        const latestProj = validProjs.length > 0 ? validProjs[validProjs.length - 1] : '--';
+        const latestProj = validProjs.length > 0 ? validProjs[validProjs.length - 1] -- : '--';
         document.getElementById('proj4Weeks').innerText = latestProj;
 
         document.getElementById('change1Day').innerText = getWindowChange(1);
