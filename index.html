@@ -1,55 +1,208 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Weight Tracker</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weight & Calorie Tracker</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 500px; margin: auto; }
-    input, button { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; }
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    input, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
+    .card { background: #f9f9f9; padding: 15px; margin-top: 15px; border-radius: 8px; border: 1px solid #ddd; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+    th { background: #f1f1f1; }
+    button.delete-btn { background: #ff4d4d; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; width: auto; }
+    button.delete-btn:hover { background: #cc0000; }
   </style>
 </head>
 <body>
   <h2>Weight & Calorie Tracker</h2>
+  
+  <label>Date:</label>
   <input type="date" id="date">
-  <input type="number" id="weight" placeholder="Weight (lbs)">
-  <input type="number" id="calories" placeholder="Calories Consumed">
+  
+  <label>Weight (lbs):</label>
+  <input type="number" step="0.1" id="weight" placeholder="e.g., 150">
+  
+  <label>Calories Consumed (optional):</label>
+  <input type="number" id="calories" placeholder="Defaults to 2200 if blank">
+
+  <label>Calories Burned (optional):</label>
+  <input type="number" id="caloriesBurned" placeholder="e.g., 2000">
+
   <button onclick="addData()">Add Entry</button>
-  <canvas id="chart"></canvas>
+
+  <div class="card" id="statsCard" style="display:none;">
+    <h3>Trend Analysis (Based on Latest Log)</h3>
+    <p><strong>Expected Weight in 4 Weeks:</strong> <span id="proj4Weeks">--</span> lbs</p>
+    <ul>
+      <li><strong>Today's Est. Change:</strong> <span id="change1Day">--</span> lbs</li>
+      <li><strong>Past 3 Days Est. Change:</strong> <span id="change3Days">--</span> lbs</li>
+      <li><strong>Past Week Est. Change:</strong> <span id="change1Week">--</span> lbs</li>
+      <li><strong>Past Month Est. Change:</strong> <span id="change1Month">--</span> lbs</li>
+    </ul>
+  </div>
+
+  <canvas id="chart" style="margin-top: 20px;"></canvas>
+
+  <h3>History Log</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Weight</th>
+        <th>Consumed</th>
+        <th>Burned</th>
+        <th>Action</th>
+      </tr>
+    chauffeur
+      <tbody id="historyTableBody"></tbody>
+  </table>
 
   <script>
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
-    const ctx = document.getElementById('chart').getContext('2d');
     
+    // Sort entries chronologically by date
+    function sortEntries() {
+      entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+
+    const ctx = document.getElementById('chart').getContext('2d');
     const chart = new Chart(ctx, {
       type: 'line',
       data: {
-        labels: entries.map(e => e.date),
+        labels: [],
         datasets: [
-          { label: 'Weight', data: entries.map(e => e.weight), borderColor: 'blue', fill: false },
-          { label: 'Expected', data: entries.map(e => e.expected), borderColor: 'red', borderDash: [5, 5], fill: false }
+          { label: 'Actual Weight', data: [], borderColor: 'blue', fill: false },
+          { label: '4-Week Proj. Weight', data: [], borderColor: 'red', borderDash: [5, 5], fill: false }
         ]
       }
     });
 
+    function init() {
+      document.getElementById('date').valueAsDate = new Date();
+      renderAll();
+    }
+
     function addData() {
       const date = document.getElementById('date').value;
       const weight = parseFloat(document.getElementById('weight').value);
-      const calories = parseFloat(document.getElementById('calories').value);
+      let calories = document.getElementById('calories').value;
+      let caloriesBurned = document.getElementById('caloriesBurned').value;
+
+      if (!date || isNaN(weight)) {
+        alert("Please enter a valid date and weight.");
+        return;
+      }
+
+      // Default consumption to 2200 if blank
+      calories = calories === "" ? 2200 : parseFloat(calories);
+      caloriesBurned = caloriesBurned === "" ? 0 : parseFloat(caloriesBurned);
+
+      // Remove any existing entry for the same date to avoid duplicates, then push
+      entries = entries.filter(e => e.date !== date);
+      entries.push({ date, weight, calories, caloriesBurned });
       
-      if (!date || isNaN(weight)) return;
-
-      // Simple expected weight calculation (assuming 2000 cal baseline, 3500 cal = 1 lb)
-      const prevExpected = entries.length > 0 ? entries[entries.length - 1].expected : weight;
-      const expected = prevExpected + ((calories - 2000) / 3500);
-
-      entries.push({ date, weight, expected });
+      sortEntries();
       localStorage.setItem('weightData', JSON.stringify(entries));
       
-      chart.data.labels.push(date);
-      chart.data.datasets[0].data.push(weight);
-      chart.data.datasets[1].data.push(expected);
-      chart.update();
+      renderAll();
+      
+      // Clear inputs
+      document.getElementById('weight').value = '';
+      document.getElementById('calories').value = '';
+      document.getElementById('caloriesBurned').value = '';
     }
+
+    function deleteEntry(index) {
+      entries.splice(index, 1);
+      sortEntries();
+      localStorage.setItem('weightData', JSON.stringify(entries));
+      renderAll();
+    }
+
+    function renderAll() {
+      sortEntries();
+      
+      chart.data.labels = entries.map(e => e.date);
+      chart.data.datasets[0].data = entries.map(e => e.weight);
+
+      let projectedWeights = [];
+      let tableHtml = '';
+
+      entries.forEach((entry, idx) => {
+        // Calculate average net calorie deficit/surplus up to this entry
+        let totalNetCal = 0;
+        for (let i = 0; i <= idx; i++) {
+          let net = entries[i].calories - entries[i].caloriesBurned;
+          totalNetCal += net;
+        }
+        let avgDailyNet = totalNetCal / (idx + 1);
+        
+        // 4 weeks (28 days) projection based on average daily net balance
+        // 3500 kcal = 1 lb of fat
+        let weeklyRate = (avgDailyNet / 3500) * 7;
+        let proj4Wk = entry.weight + (weeklyRate * 4);
+        projectedWeights.push(parseFloat(proj4Wk.toFixed(1)));
+
+        // Table population
+        tableHtml += `<tr>
+          <td>${entry.date}</td>
+          <td>${entry.weight}</td>
+          <td>${entry.calories}</td>
+          <td>${entry.caloriesBurned}</td>
+          <td><button class="delete-btn" onclick="deleteEntry(${idx})">Delete</button></td>
+        </tr>`;
+      });
+
+      chart.data.datasets[1].data = projectedWeights;
+      chart.update();
+      document.getElementById('historyTableBody').innerHTML = tableHtml;
+
+      // Update analytics stats based on the latest entry
+      if (entries.length > 0) {
+        document.getElementById('statsCard').style.display = 'block';
+        const latest = entries[entries.length - 1];
+        const latestProj = projectedWeights[projectedWeights.length - 1];
+        document.getElementById('proj4Weeks').innerText = latestProj;
+
+        // Time window calculations (1 day, 3 days, 7 days, 30 days)
+        document.getElementById('change1Day').innerText = getWindowChange(1);
+        document.getElementById('change3Days').innerText = getWindowChange(3);
+        document.getElementById('change1Week').innerText = getWindowChange(7);
+        document.getElementById('change1Month').innerText = getWindowChange(30);
+      } else {
+        document.getElementById('statsCard').style.display = 'none';
+      }
+    }
+
+    function getWindowChange(days) {
+      if (entries.length === 0) return "0.0";
+      let latestDate = new Date(entries[entries.length - 1].date);
+      let totalNet = 0;
+      let count = 0;
+
+      entries.forEach(e => {
+        let eDate = new Date(e.date);
+        let diffTime = latestDate - eDate;
+        let diffDays = diffTime / (1000 * 3600 * 24);
+        if (diffDays >= 0 && diffDays < days) {
+          totalNet += (e.calories - e.caloriesBurned);
+          count++;
+        }
+      });
+
+      if (count === 0) totalNet = entries[entries.length - 1].calories - entries[entries.length - 1].caloriesBurned;
+      
+      let totalPoundsChange = (totalNet / 3500) * (days); 
+      // Approximate cumulative effect over the window period length scaled linearly
+      let windowPounds = (totalNet / 3500); 
+      return windowPounds >= 0 ? `+${windowPounds.toFixed(2)}` : windowPounds.toFixed(2);
+    }
+
+    init();
   </script>
 </body>
 </html>
+
