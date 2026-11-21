@@ -114,7 +114,7 @@
   </div>
 
   <div class="card" id="statsCard" style="display:none;">
-    <h3>Trend Analysis (From Nov 17 Baseline · Calories Consumed)</h3>
+    <h3>Trend Analysis (Chained From Nov 17 Weight)</h3>
     <p><strong>Expected Weight in 4 Weeks:</strong> <span id="proj4Weeks">--</span> lbs</p>
     <ul>
       <li><strong>Today's Est. Change:</strong> <span id="change1Day">--</span> lbs</li>
@@ -263,7 +263,7 @@
   </div>
 
   <script>
-    const PROJECTION_CUTOFF_DATE = '2026-11-17';
+    const START_WEIGHT_DATE = '2026-11-17';
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
     let chartMonth, chartYear, macroPieChart = null;
     let videoStream = null;
@@ -365,7 +365,7 @@
           labels: [],
           datasets: [
             { label: 'Weight', data: [], borderColor: 'blue', backgroundColor: 'blue', pointRadius: 3, fill: false, spanGaps: true },
-            { label: 'Projected (From Nov 17 · Consumed)', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 3, pointStyle: 'circle', fill: false, spanGaps: true }
+            { label: 'Projected Weight (From Nov 17)', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 3, pointStyle: 'circle', fill: false, spanGaps: true }
           ]
         },
         options: commonChartOptions
@@ -857,33 +857,29 @@
       reader.readAsText(file);
     }
 
-    // Finds anchor weight on/after Nov 17 and projects forward using calories consumed only
-    function computeConsumedOnlyProjections(allEntries) {
+    // Anchors on Nov 17 weight and chains projected weight forward via (consumed - burned) / 3500
+    function computeChainedProjections(allEntries) {
       const map = new Map();
       if (!allEntries || allEntries.length === 0) return map;
 
-      let baselineIdx = allEntries.findIndex(e => e.date >= PROJECTION_CUTOFF_DATE && e.weight !== null);
-      if (baselineIdx === -1) {
-        for (let i = allEntries.length - 1; i >= 0; i--) {
-          if (allEntries[i].weight !== null) {
-            baselineIdx = i;
-            break;
-          }
-        }
-      }
-      if (baselineIdx === -1) return map;
+      const anchorIdx = allEntries.findIndex(e => e.date >= START_WEIGHT_DATE && e.weight !== null);
+      if (anchorIdx === -1) return map;
 
-      let runningProj = allEntries[baselineIdx].weight;
-      for (let i = baselineIdx; i < allEntries.length; i++) {
+      let prevProjectedWeight = allEntries[anchorIdx].weight;
+      for (let i = anchorIdx; i < allEntries.length; i++) {
         const e = allEntries[i];
         const consumed = e.calories || 0;
-        const addedFromConsumed = consumed / 3500;
-        const nextProj = runningProj + addedFromConsumed;
+        const burned = e.caloriesBurned || 2000;
+        const netDelta = (consumed - burned) / 3500;
+        const currentProjected = i === anchorIdx ? prevProjectedWeight : prevProjectedWeight + netDelta;
+
         map.set(e.date, {
-          addedLbs: addedFromConsumed,
-          nextDayProj: parseFloat(nextProj.toFixed(1))
+          projectedWeight: parseFloat(currentProjected.toFixed(1)),
+          rawProjectedWeight: currentProjected,
+          dailyDelta: netDelta
         });
-        runningProj = nextProj;
+
+        prevProjectedWeight = currentProjected;
       }
 
       return map;
@@ -909,7 +905,7 @@
         }
       });
 
-      const projMap = computeConsumedOnlyProjections(entries);
+      const projMap = computeChainedProjections(entries);
 
       // Render History Log
       for (let idx = entries.length - 1; idx >= 0; idx--) {
@@ -918,8 +914,9 @@
         let projStr = "--";
         let projColor = "inherit";
         if (projInfo) {
-          projStr = (projInfo.addedLbs >= 0 ? "+" : "") + projInfo.addedLbs.toFixed(2) + " lbs";
-          projColor = projInfo.addedLbs > 0 ? "red" : "green";
+          const sign = projInfo.dailyDelta >= 0 ? "+" : "";
+          projStr = `${projInfo.projectedWeight.toFixed(1)} (${sign}${projInfo.dailyDelta.toFixed(2)})`;
+          projColor = projInfo.dailyDelta < 0 ? "green" : (projInfo.dailyDelta > 0 ? "red" : "inherit");
         }
 
         let actualStr = "--";
@@ -985,7 +982,7 @@
 
       updateMacroPieChart(todayTotalP, todayTotalF, todayTotalC);
 
-      function updateChartWithContinuousProjections(chartInstance, filteredEntries) {
+      function updateChartWithChainedProjections(chartInstance, filteredEntries) {
         let labels = [];
         let weights = [];
         let projPoints = [];
@@ -993,18 +990,9 @@
         filteredEntries.forEach((entry) => {
           labels.push(formatDateDisplay(entry.date));
           weights.push(entry.weight);
-          projPoints.push(null);
 
           const projInfo = projMap.get(entry.date);
-          if (projInfo) {
-            let nextDayDate = new Date(entry.date + 'T00:00:00');
-            nextDayDate.setDate(nextDayDate.getDate() + 1);
-            let nextDayStr = nextDayDate.toISOString().split('T')[0];
-
-            labels.push(formatDateDisplay(nextDayStr) + " (Proj)");
-            weights.push(null);
-            projPoints.push(projInfo.nextDayProj);
-          }
+          projPoints.push(projInfo ? projInfo.projectedWeight : null);
         });
 
         chartInstance.data.labels = labels;
@@ -1015,18 +1003,18 @@
 
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      updateChartWithContinuousProjections(chartYear, entries.filter(e => new Date(e.date) >= oneYearAgo));
+      updateChartWithChainedProjections(chartYear, entries.filter(e => new Date(e.date) >= oneYearAgo));
 
       const oneMonthAgo = new Date();
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-      updateChartWithContinuousProjections(chartMonth, entries.filter(e => new Date(e.date) >= oneMonthAgo));
+      updateChartWithChainedProjections(chartMonth, entries.filter(e => new Date(e.date) >= oneMonthAgo));
 
       document.getElementById('historyTableBody').innerHTML = historyTableHtml;
 
       if (entries.length > 0) {
         document.getElementById('statsCard').style.display = 'block';
-        const latestProj = getProjected4WeeksFromConsumed();
-        document.getElementById('proj4Weeks').innerText = latestProj !== null ? latestProj : '--';
+        const proj4Wk = getChained4WeekProjection(projMap);
+        document.getElementById('proj4Weeks').innerText = proj4Wk !== null ? proj4Wk : '--';
 
         document.getElementById('change1Day').innerText = getWindowChange(1);
         document.getElementById('change3Days').innerText = getWindowChange(3);
@@ -1037,25 +1025,20 @@
       }
     }
 
-    function getProjected4WeeksFromConsumed() {
-      const eligible = entries.filter(e => e.date >= PROJECTION_CUTOFF_DATE);
-      if (eligible.length === 0) return null;
+    function getChained4WeekProjection(projMap) {
+      const scoped = entries.filter(e => e.date >= START_WEIGHT_DATE && projMap.has(e.date));
+      if (scoped.length === 0) return null;
 
-      const latest = eligible[eligible.length - 1];
-      const latestProjInfo = projMapOrLatest(latest);
-      if (latestProjInfo === null) return null;
+      const lastEntry = scoped[scoped.length - 1];
+      const lastProj = projMap.get(lastEntry.date).rawProjectedWeight;
 
-      let totalConsumed = 0;
-      eligible.forEach(e => { totalConsumed += (e.calories || 0); });
-      const avgDailyConsumed = totalConsumed / eligible.length;
-      const weeklyRate = (avgDailyConsumed / 3500) * 7;
-      return parseFloat((latestProjInfo + (weeklyRate * 4)).toFixed(1));
-    }
-
-    function projMapOrLatest(entry) {
-      const map = computeConsumedOnlyProjections(entries);
-      const info = map.get(entry.date);
-      return info ? info.nextDayProj : null;
+      let totalNet = 0;
+      scoped.forEach(e => {
+        totalNet += ((e.calories || 0) - (e.caloriesBurned || 2000));
+      });
+      const avgDailyNet = totalNet / scoped.length;
+      const weeklyRate = (avgDailyNet / 3500) * 7;
+      return parseFloat((lastProj + (weeklyRate * 4)).toFixed(1));
     }
 
     function updateMacroPieChart(p, f, c) {
@@ -1093,10 +1076,10 @@
 
     function getWindowChange(days) {
       if (entries.length === 0) return "0.0";
-      const scoped = entries.filter(e => e.date >= PROJECTION_CUTOFF_DATE);
+      const scoped = entries.filter(e => e.date >= START_WEIGHT_DATE);
       const source = scoped.length > 0 ? scoped : entries;
       let latestDate = new Date(source[source.length - 1].date);
-      let totalConsumed = 0;
+      let totalNet = 0;
       let count = 0;
 
       source.forEach(e => {
@@ -1104,13 +1087,16 @@
         let diffTime = latestDate - eDate;
         let diffDays = diffTime / (1000 * 3600 * 24);
         if (diffDays >= 0 && diffDays < days) {
-          totalConsumed += (e.calories || 0);
+          totalNet += ((e.calories || 0) - (e.caloriesBurned || 2000));
           count++;
         }
       });
 
-      if (count === 0) totalConsumed = source[source.length - 1].calories || 0;
-      let windowPounds = (totalConsumed / 3500); 
+      if (count === 0) {
+        const last = source[source.length - 1];
+        totalNet = (last.calories || 0) - (last.caloriesBurned || 2000);
+      }
+      let windowPounds = (totalNet / 3500); 
       return windowPounds >= 0 ? `+${windowPounds.toFixed(2)}` : windowPounds.toFixed(2);
     }
 
