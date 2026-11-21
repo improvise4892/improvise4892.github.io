@@ -675,7 +675,7 @@
     <summary>Backup, Restore & CSV Import (Browser Storage)</summary>
     <div style="margin-top: 10px;">
       <div class="storage-note">
-        <strong>Where your data lives:</strong> Stored locally in this browser (<code>localStorage</code> under <code>weightData</code>). Choose whether you want CSV backups saved locally or prepared for <strong>Google Drive</strong> under your files.
+        <strong>Where your data lives:</strong> Stored locally in this browser (<code>localStorage</code> under <code>weightData</code>). CSV backups include a lossless <code>food_items_b64</code> column so individual food items and macros restore accurately on any device.
       </div>
 
       <label for="backupDestinationSelect">Where Should CSV Backups Be Stored?</label>
@@ -839,6 +839,40 @@
     let historyPageOffset = 0;
     let editingEntryOriginalDate = null;
     let flaggedEntriesMap = new Map();
+
+    function encodeUtf8Base64(str) {
+      const bytes = new TextEncoder().encode(String(str ?? ''));
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary);
+    }
+
+    function decodeUtf8Base64(b64) {
+      const cleaned = String(b64 ?? '').trim().replace(/\s+/g, '');
+      if (!cleaned) return '';
+      const binary = atob(cleaned);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return new TextDecoder().decode(bytes);
+    }
+
+    function normalizeFoodItemsArray(rawItems) {
+      if (!Array.isArray(rawItems)) return [];
+      return rawItems
+        .filter((it) => it && typeof it.name === 'string' && it.name.trim() !== '')
+        .map((it) => ({
+          name: it.name.trim(),
+          meal: typeof it.meal === 'string' && it.meal.trim() ? it.meal.trim() : 'Snack',
+          calories: parseStrictNonNegativeNumber(it.calories) || 0,
+          protein: parseStrictNonNegativeNumber(it.protein) || 0,
+          fat: parseStrictNonNegativeNumber(it.fat) || 0,
+          carbs: parseStrictNonNegativeNumber(it.carbs) || 0
+        }));
+    }
 
     function hasNonNumericCharacters(rawValue, allowDecimal = true) {
       const str = String(rawValue ?? '').trim();
@@ -1009,18 +1043,27 @@
       const targetDest = dest || getBackupDestination();
       const csv = buildFullBackupCsv();
       const filename = `weight-calorie-backup-${getLocalDateKey()}.csv`;
+      const totalItems = entries.reduce((sum, e) => sum + (Array.isArray(e.items) ? e.items.length : 0), 0);
 
       if (targetDest === 'google_drive') {
         triggerFileDownload(filename, csv, 'text/csv;charset=utf-8;');
         showStatus(
-          `CSV prepared (${filename}) for Google Drive ("My Drive" / your files). Download started—you can also ask me to save a copy directly into your Google Drive files.`,
+          `CSV prepared (${filename}) with ${entries.length} days and ${totalItems} food items for Google Drive ("My Drive" / your files). Download started—you can also ask me to save a copy directly into your Google Drive files.`,
           'success',
           'backupStatus'
         );
       } else {
         triggerFileDownload(filename, csv, 'text/csv;charset=utf-8;');
-        showStatus(`CSV backup downloaded locally to your device (${filename}).`, 'success', 'backupStatus');
+        showStatus(`CSV backup downloaded (${filename}) with ${entries.length} days and ${totalItems} food items.`, 'success', 'backupStatus');
       }
+    }
+
+    function escapeCsvField(val) {
+      const s = String(val ?? '');
+      if (/[",\n\r]/.test(s)) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
     }
 
     function buildFullBackupCsv() {
@@ -1029,18 +1072,29 @@
         'weight_lbs',
         'calories_consumed',
         'calories_burned',
-        'food_items_json'
+        'food_item_count',
+        'food_items_summary',
+        'food_items_b64'
       ];
       const lines = [headers.join(',')];
 
       entries.forEach((entry) => {
-        const safeDate = String(entry.date || '');
-        const safeWeight = entry.weight !== null && entry.weight !== undefined ? String(entry.weight) : '';
-        const safeConsumed = String(entry.calories ?? 0);
-        const safeBurned = String(entry.caloriesBurned ?? 2000);
-        const itemsJson = JSON.stringify(Array.isArray(entry.items) ? entry.items : []);
-        const escapedItems = `"${itemsJson.replace(/"/g, '""')}"`;
-        lines.push([safeDate, safeWeight, safeConsumed, safeBurned, escapedItems].join(','));
+        const items = normalizeFoodItemsArray(entry.items);
+        const consumed = items.length > 0
+          ? items.reduce((s, x) => s + x.calories, 0)
+          : (parseStrictNonNegativeNumber(entry.calories) || 0);
+        const summary = items.map((it) => `${it.name} (${it.meal}, ${it.calories} cal)`).join(' | ');
+        const b64Payload = encodeUtf8Base64(JSON.stringify(items));
+
+        lines.push([
+          escapeCsvField(entry.date || ''),
+          escapeCsvField(entry.weight !== null && entry.weight !== undefined ? entry.weight : ''),
+          escapeCsvField(consumed),
+          escapeCsvField(entry.caloriesBurned ?? 2000),
+          escapeCsvField(items.length),
+          escapeCsvField(summary),
+          escapeCsvField(b64Payload)
+        ].join(','));
       });
 
       return lines.join('\n');
@@ -1059,21 +1113,65 @@
     }
 
     function downloadBackupJson() {
+      const normalizedEntries = entries.map((entry) => {
+        const items = normalizeFoodItemsArray(entry.items);
+        return {
+          date: entry.date,
+          weight: entry.weight !== null && entry.weight !== undefined ? entry.weight : null,
+          calories: items.length > 0 ? items.reduce((s, x) => s + x.calories, 0) : (parseStrictNonNegativeNumber(entry.calories) || 0),
+          caloriesBurned: entry.caloriesBurned ?? 2000,
+          items
+        };
+      });
+      const totalItems = normalizedEntries.reduce((sum, e) => sum + e.items.length, 0);
       const payload = {
         exportedAt: new Date().toISOString(),
         storageKey: 'weightData',
-        entries
+        entries: normalizedEntries
       };
       triggerFileDownload(
         `weight-calorie-backup-${getLocalDateKey()}.json`,
         JSON.stringify(payload, null, 2),
         'application/json'
       );
-      showStatus('JSON backup downloaded from browser storage.', 'success', 'backupStatus');
+      showStatus(`JSON backup downloaded with ${normalizedEntries.length} days and ${totalItems} food items.`, 'success', 'backupStatus');
     }
 
     function downloadBackupCsv() {
       exportCsvToChosenDestination(getBackupDestination());
+    }
+
+    function parseFoodItemsFromCsvRow(cols, b64Idx, legacyItemsIdx) {
+      if (b64Idx >= 0 && cols[b64Idx]) {
+        try {
+          const decodedJson = decodeUtf8Base64(cols[b64Idx]);
+          if (decodedJson) {
+            const parsed = JSON.parse(decodedJson);
+            if (Array.isArray(parsed)) {
+              return { items: normalizeFoodItemsArray(parsed), decodeFailed: false };
+            }
+          }
+        } catch (_) {
+          return { items: [], decodeFailed: true };
+        }
+      }
+
+      if (legacyItemsIdx >= 0 && cols[legacyItemsIdx]) {
+        let raw = String(cols[legacyItemsIdx]).trim();
+        if (raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2) {
+          raw = raw.slice(1, -1).replace(/""/g, '"');
+        }
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            return { items: normalizeFoodItemsArray(parsed), decodeFailed: false };
+          }
+        } catch (_) {
+          return { items: [], decodeFailed: true };
+        }
+      }
+
+      return { items: [], decodeFailed: false };
     }
 
     function restoreBackupFile() {
@@ -1087,13 +1185,16 @@
       const reader = new FileReader();
       reader.onload = function(e) {
         try {
-          const text = String(e.target.result || '').trim();
+          const text = String(e.target.result || '').replace(/^\ufeff/, '').trim();
           if (!text) {
             showStatus('Backup file is empty.', 'error', 'backupStatus');
             return;
           }
 
           let restoredEntries = [];
+          let totalFoodItemsRestored = 0;
+          let decodeIssues = 0;
+
           if (text.startsWith('{') || text.startsWith('[')) {
             const parsed = JSON.parse(text);
             const rawList = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.entries) ? parsed.entries : []);
@@ -1103,18 +1204,8 @@
                 if (!dateKey) return null;
                 const wCheck = validateWeightInput(row.weight, false);
                 const bCheck = validateCaloriesBurnedInput(row.caloriesBurned, true);
-                const items = Array.isArray(row.items)
-                  ? row.items
-                      .filter((it) => it && typeof it.name === 'string' && it.name.trim())
-                      .map((it) => ({
-                        name: it.name.trim(),
-                        meal: it.meal || 'Snack',
-                        calories: parseStrictNonNegativeNumber(it.calories) || 0,
-                        protein: parseStrictNonNegativeNumber(it.protein) || 0,
-                        fat: parseStrictNonNegativeNumber(it.fat) || 0,
-                        carbs: parseStrictNonNegativeNumber(it.carbs) || 0
-                      }))
-                  : [];
+                const items = normalizeFoodItemsArray(row.items);
+                totalFoodItemsRestored += items.length;
                 const consumed = items.length > 0
                   ? items.reduce((s, x) => s + x.calories, 0)
                   : (parseStrictNonNegativeNumber(row.calories) || 0);
@@ -1139,7 +1230,8 @@
             const weightIdx = headers.findIndex((h) => h.includes('weight'));
             const consumedIdx = headers.findIndex((h) => h.includes('consumed') || h === 'calories');
             const burnedIdx = headers.findIndex((h) => h.includes('burned'));
-            const itemsIdx = headers.findIndex((h) => h.includes('items'));
+            const b64Idx = headers.findIndex((h) => h === 'food_items_b64' || h.includes('b64'));
+            const legacyItemsIdx = headers.findIndex((h) => h === 'food_items_json' || h === 'items');
 
             for (let i = 1; i < lines.length; i++) {
               const cols = splitCSVLine(lines[i], delimiter);
@@ -1150,22 +1242,10 @@
               const bRaw = burnedIdx >= 0 ? cols[burnedIdx] : '';
               const bCheck = validateCaloriesBurnedInput(bRaw, true);
 
-              let items = [];
-              if (itemsIdx >= 0 && cols[itemsIdx]) {
-                try {
-                  const parsedItems = JSON.parse(cols[itemsIdx]);
-                  if (Array.isArray(parsedItems)) {
-                    items = parsedItems.map((it) => ({
-                      name: String(it.name || '').trim() || 'Item',
-                      meal: String(it.meal || 'Snack'),
-                      calories: parseStrictNonNegativeNumber(it.calories) || 0,
-                      protein: parseStrictNonNegativeNumber(it.protein) || 0,
-                      fat: parseStrictNonNegativeNumber(it.fat) || 0,
-                      carbs: parseStrictNonNegativeNumber(it.carbs) || 0
-                    }));
-                  }
-                } catch (_) {}
-              }
+              const itemResult = parseFoodItemsFromCsvRow(cols, b64Idx, legacyItemsIdx);
+              if (itemResult.decodeFailed) decodeIssues++;
+              const items = itemResult.items;
+              totalFoodItemsRestored += items.length;
 
               const cVal = consumedIdx >= 0 ? (parseStrictNonNegativeNumber(cols[consumedIdx]) || 0) : 0;
               restoredEntries.push({
@@ -1189,7 +1269,12 @@
           localStorage.setItem('weightData', JSON.stringify(entries));
           renderAll();
           fileInput.value = '';
-          showStatus(`Restored ${entries.length} entries into browser storage.`, 'success', 'backupStatus');
+          const warningSuffix = decodeIssues > 0 ? ` (${decodeIssues} row(s) had unreadable food item data)` : '';
+          showStatus(
+            `Restored ${entries.length} day entries and ${totalFoodItemsRestored} food items into browser storage${warningSuffix}.`,
+            decodeIssues > 0 ? 'error' : 'success',
+            'backupStatus'
+          );
         } catch (err) {
           showStatus('Restore failed: ' + err.message, 'error', 'backupStatus');
         }
@@ -1690,7 +1775,12 @@
       for (let i = 0; i < line.length; i++) {
         const char = line[i];
         if (char === '"') {
-          inQuotes = !inQuotes;
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
         } else if (char === delimiter && !inQuotes) {
           result.push(current.trim());
           current = '';
