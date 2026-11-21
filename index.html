@@ -266,6 +266,39 @@
       font-weight: 600;
     }
 
+    .history-pager {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+
+    .history-pager-buttons {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .history-pager button {
+      width: auto;
+      margin: 0;
+      padding: 5px 11px;
+      font-size: 12px;
+    }
+
+    .history-pager button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .history-range-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
     details {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -556,8 +589,15 @@
 
   <!-- Collapsible Section 2: Weight & Calorie History Log -->
   <details open>
-    <summary>📋 Weight & History Log (Past Week & All-Time)</summary>
+    <summary>📋 Weight & History Log (20 Entries Per Page)</summary>
     <div style="margin-top: 10px;">
+      <div class="history-pager">
+        <span class="history-range-label" id="historyRangeLabel">No entries yet</span>
+        <div class="history-pager-buttons">
+          <button type="button" class="secondary-btn" id="newerHistoryBtn" onclick="changeHistoryPage(-1)">◀ Newer 20</button>
+          <button type="button" class="secondary-btn" id="olderHistoryBtn" onclick="changeHistoryPage(1)">Older 20 ▶</button>
+        </div>
+      </div>
       <table>
         <thead>
           <tr>
@@ -670,6 +710,7 @@
 
   <script>
     const START_WEIGHT_DATE = '2026-11-17';
+    const HISTORY_PAGE_SIZE = 20;
 
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
     let chartMonth, chartYear, macroPieChart = null;
@@ -679,6 +720,7 @@
     let pendingFoodSelection = null;
     let activeCelebrations = [];
     let celebrationIndex = 0;
+    let historyPageOffset = 0;
 
     function getLocalDateKey() {
       const now = new Date();
@@ -943,6 +985,18 @@
       renderCelebrationBanner();
     }
 
+    function changeHistoryPage(deltaPages) {
+      const total = entries.length;
+      if (total === 0) {
+        historyPageOffset = 0;
+        renderAll();
+        return;
+      }
+      const maxOffset = Math.max(0, Math.floor((total - 1) / HISTORY_PAGE_SIZE) * HISTORY_PAGE_SIZE);
+      historyPageOffset = Math.min(maxOffset, Math.max(0, historyPageOffset + (deltaPages * HISTORY_PAGE_SIZE)));
+      renderAll();
+    }
+
     function sortEntries() {
       entries.sort((a, b) => new Date(a.date) - new Date(b.date));
     }
@@ -1050,6 +1104,7 @@
     function clearAllData() {
       if (confirm("Are you sure you want to delete all stored entries?")) {
         entries = [];
+        historyPageOffset = 0;
         localStorage.removeItem('weightData');
         renderAll();
         showStatus("All entries cleared.", "info");
@@ -1581,45 +1636,67 @@
 
       const projMap = computeChainedProjections(entries);
 
-      // Render History Log
-      for (let idx = entries.length - 1; idx >= 0; idx--) {
-        let entry = entries[idx];
-        let projInfo = projMap.get(entry.date);
-        let projStr = "--";
-        let projColor = "inherit";
-        if (projInfo) {
-          const sign = projInfo.dailyDelta >= 0 ? "+" : "";
-          projStr = `${projInfo.projectedWeight.toFixed(1)} (${sign}${projInfo.dailyDelta.toFixed(2)})`;
-          projColor = projInfo.dailyDelta < 0 ? "green" : (projInfo.dailyDelta > 0 ? "red" : "inherit");
+      // Render History Log (20 newest-first entries per page)
+      const totalEntries = entries.length;
+      if (totalEntries === 0) {
+        historyPageOffset = 0;
+        historyTableHtml = `<tr><td colspan="7" style="color: var(--muted);"><i>No history entries logged yet.</i></td></tr>`;
+        document.getElementById('historyRangeLabel').innerText = 'No entries yet';
+        document.getElementById('newerHistoryBtn').disabled = true;
+        document.getElementById('olderHistoryBtn').disabled = true;
+      } else {
+        const maxOffset = Math.max(0, Math.floor((totalEntries - 1) / HISTORY_PAGE_SIZE) * HISTORY_PAGE_SIZE);
+        if (historyPageOffset > maxOffset) {
+          historyPageOffset = maxOffset;
         }
 
-        let actualStr = "--";
-        if (entry.weight !== null) {
-          let prevWeight = null;
-          for (let p = idx - 1; p >= 0; p--) {
-            if (entries[p].weight !== null) {
-              prevWeight = entries[p].weight;
-              break;
+        const startIdx = historyPageOffset;
+        const endIdx = Math.min(totalEntries, startIdx + HISTORY_PAGE_SIZE);
+
+        for (let pos = startIdx; pos < endIdx; pos++) {
+          const idx = totalEntries - 1 - pos;
+          const entry = entries[idx];
+          const projInfo = projMap.get(entry.date);
+          let projStr = "--";
+          let projColor = "inherit";
+          if (projInfo) {
+            const sign = projInfo.dailyDelta >= 0 ? "+" : "";
+            projStr = `${projInfo.projectedWeight.toFixed(1)} (${sign}${projInfo.dailyDelta.toFixed(2)})`;
+            projColor = projInfo.dailyDelta < 0 ? "green" : (projInfo.dailyDelta > 0 ? "red" : "inherit");
+          }
+
+          let actualStr = "--";
+          if (entry.weight !== null) {
+            let prevWeight = null;
+            for (let p = idx - 1; p >= 0; p--) {
+              if (entries[p].weight !== null) {
+                prevWeight = entries[p].weight;
+                break;
+              }
+            }
+            if (prevWeight !== null) {
+              let actualDiff = entry.weight - prevWeight;
+              actualStr = (actualDiff >= 0 ? "+" : "") + actualDiff.toFixed(1);
             }
           }
-          if (prevWeight !== null) {
-            let actualDiff = entry.weight - prevWeight;
-            actualStr = (actualDiff >= 0 ? "+" : "") + actualDiff.toFixed(1);
-          }
+
+          historyTableHtml += `<tr>
+            <td>${formatDateDisplay(entry.date)}</td>
+            <td>${entry.weight !== null ? entry.weight : '--'}</td>
+            <td>${entry.calories}</td>
+            <td>${entry.caloriesBurned}</td>
+            <td style="color: ${projColor}">${projStr}</td>
+            <td style="font-weight: bold;">${actualStr}</td>
+            <td>
+              <button class="edit-btn" onclick="editEntry(${idx})">Edit</button>
+              <button class="delete-btn" onclick="deleteEntry(${idx})">Delete</button>
+            </td>
+          </tr>`;
         }
 
-        historyTableHtml += `<tr>
-          <td>${formatDateDisplay(entry.date)}</td>
-          <td>${entry.weight !== null ? entry.weight : '--'}</td>
-          <td>${entry.calories}</td>
-          <td>${entry.caloriesBurned}</td>
-          <td style="color: ${projColor}">${projStr}</td>
-          <td style="font-weight: bold;">${actualStr}</td>
-          <td>
-            <button class="edit-btn" onclick="editEntry(${idx})">Edit</button>
-            <button class="delete-btn" onclick="deleteEntry(${idx})">Delete</button>
-          </td>
-        </tr>`;
+        document.getElementById('historyRangeLabel').innerText = `Showing ${startIdx + 1}–${endIdx} of ${totalEntries}`;
+        document.getElementById('newerHistoryBtn').disabled = (startIdx <= 0);
+        document.getElementById('olderHistoryBtn').disabled = (endIdx >= totalEntries);
       }
 
       // Render Selected Day Food Log Table & Macros Pie Chart
