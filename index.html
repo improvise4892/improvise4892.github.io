@@ -20,6 +20,8 @@
       --accent-hover: #24574a;
       --accent-soft: #e6f0ec;
       --warm-soft: #fbf4ea;
+      --gold-soft: #fff8e6;
+      --gold-border: #e6c36a;
     }
 
     * { box-sizing: border-box; }
@@ -109,7 +111,7 @@
       border-left: 4px solid var(--accent);
       padding: 12px 16px;
       border-radius: 10px;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       font-style: italic;
       color: #1f3a32;
       box-shadow: 0 3px 10px rgba(31, 58, 50, 0.05);
@@ -123,6 +125,76 @@
       font-weight: 600;
       color: var(--muted);
     }
+
+    .celebration-banner {
+      display: none;
+      background: linear-gradient(135deg, #fffdf6 0%, var(--gold-soft) 100%);
+      border: 1px solid var(--gold-border);
+      border-left: 5px solid #d49b1a;
+      padding: 13px 16px;
+      border-radius: 11px;
+      margin-bottom: 14px;
+      color: #3a2b07;
+      box-shadow: 0 6px 18px rgba(180, 130, 20, 0.11);
+    }
+
+    .celebration-banner.tier-150 {
+      background: linear-gradient(135deg, #fff8f2 0%, #ffe8d6 100%);
+      border-color: #e89b64;
+      border-left-color: #c85a17;
+      color: #4a1e05;
+    }
+
+    .celebration-banner.tier-140 {
+      background: linear-gradient(135deg, #f3fbf8 0%, #d8f3e8 55%, #fff5d6 100%);
+      border-color: #4ea884;
+      border-left-color: #1b7a56;
+      color: #103829;
+      box-shadow: 0 8px 22px rgba(27, 122, 86, 0.16);
+    }
+
+    .celebration-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+
+    .celebration-badge {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(212, 155, 26, 0.18);
+    }
+
+    .celebration-message {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.45;
+    }
+
+    .celebration-sub {
+      margin-top: 6px;
+      font-size: 12px;
+      opacity: 0.85;
+    }
+
+    .celebration-cycle-btn {
+      width: auto;
+      margin: 0;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(0, 0, 0, 0.14);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .celebration-cycle-btn:hover { background: #fff; }
 
     .chart-container {
       position: relative;
@@ -311,6 +383,16 @@
   <div class="quote-banner" id="dailyQuoteBanner">
     <span id="dailyQuoteText">I'm proud of you for showing up and checking in today.</span>
     <span class="quote-author" id="dailyQuoteAuthor">— Daily Check-In</span>
+  </div>
+
+  <!-- Milestone & Surprise Celebration Banner -->
+  <div class="celebration-banner" id="celebrationBanner">
+    <div class="celebration-header">
+      <span class="celebration-badge" id="celebrationBadge">Milestone Unlocked</span>
+      <button type="button" class="celebration-cycle-btn" id="celebrationCycleBtn" style="display:none;" onclick="cycleCelebration()">Next Milestone ▶</button>
+    </div>
+    <div class="celebration-message" id="celebrationMessage"></div>
+    <div class="celebration-sub" id="celebrationSub"></div>
   </div>
 
   <h2>Weight & Calorie Tracker</h2>
@@ -563,6 +645,8 @@
     let scanningActive = false;
     let productsCache = [];
     let pendingFoodSelection = null;
+    let activeCelebrations = [];
+    let celebrationIndex = 0;
 
     function getLocalDateKey() {
       const now = new Date();
@@ -680,6 +764,147 @@
 
       document.getElementById('dailyQuoteText').innerText = `"${chosen}"`;
       document.getElementById('dailyQuoteAuthor').innerText = `— ${tag}`;
+    }
+
+    function computeCelebrations() {
+      const list = [];
+      const postNov17 = entries.filter(e => e.date >= START_WEIGHT_DATE);
+      const startEntry = postNov17.find(e => e.weight !== null);
+      const weightsAfterStart = postNov17.filter(e => e.weight !== null).map(e => e.weight);
+
+      if (startEntry && weightsAfterStart.length > 0) {
+        const startWeight = startEntry.weight;
+        const lowestWeight = Math.min(...weightsAfterStart);
+        const totalLost = startWeight - lowestWeight;
+
+        // 1. Escalating celebrations for crossing below 160, 150, and 140 lbs
+        if (lowestWeight < 140) {
+          list.push({
+            tierClass: 'tier-140',
+            badge: 'MEGA CELEBRATION · UNDER 140 LBS',
+            message: `UNDER 140 LBS (${lowestWeight.toFixed(1)} lbs)! This is a massive milestone—celebrate how much grit, patience, and self-trust it took to get here!`,
+            sub: `Also unlocked: Under 160 & Under 150 lbs · Baseline ${formatDateDisplay(startEntry.date)}: ${startWeight.toFixed(1)} lbs`
+          });
+        } else if (lowestWeight < 150) {
+          list.push({
+            tierClass: 'tier-150',
+            badge: 'HUGE CELEBRATION · UNDER 150 LBS',
+            message: `UNDER 150 LBS (${lowestWeight.toFixed(1)} lbs)! Huge milestone unlocked—your steady daily choices are paying off in a major way!`,
+            sub: `Also unlocked: Under 160 lbs · Baseline ${formatDateDisplay(startEntry.date)}: ${startWeight.toFixed(1)} lbs`
+          });
+        } else if (lowestWeight < 160) {
+          list.push({
+            tierClass: '',
+            badge: 'BIG CELEBRATION · UNDER 160 LBS',
+            message: `UNDER 160 LBS (${lowestWeight.toFixed(1)} lbs)! A big celebration is in order—you broke into a brand-new bracket!`,
+            sub: `Baseline ${formatDateDisplay(startEntry.date)}: ${startWeight.toFixed(1)} lbs`
+          });
+        }
+
+        // 2. Every 5 lbs lost relative to Nov 17 starting weight
+        const fiveLbSteps = Math.floor(totalLost / 5);
+        if (fiveLbSteps >= 1) {
+          const milestoneLbs = fiveLbSteps * 5;
+          list.push({
+            tierClass: fiveLbSteps >= 4 ? 'tier-140' : (fiveLbSteps >= 2 ? 'tier-150' : ''),
+            badge: `5-LB MILESTONE · ${milestoneLbs} LBS LOST`,
+            message: `You've hit the ${milestoneLbs}-lb loss mark since Nov 17 (down ${totalLost.toFixed(1)} lbs from ${startWeight.toFixed(1)} lbs to ${lowestWeight.toFixed(1)} lbs)! Every 5 lbs is real momentum.`,
+            sub: `Milestone tier #${fiveLbSteps} (every 5 lbs from ${formatDateDisplay(startEntry.date)})`
+          });
+        }
+      }
+
+      // 3. Surprise milestones based on good data
+      const sortedDates = [...new Set(entries.map(e => e.date).filter(Boolean))].sort();
+      let consecutiveDays = 0;
+      if (sortedDates.length > 0) {
+        consecutiveDays = 1;
+        for (let i = sortedDates.length - 1; i > 0; i--) {
+          const curr = new Date(sortedDates[i] + 'T00:00:00');
+          const prev = new Date(sortedDates[i - 1] + 'T00:00:00');
+          const diffDays = (curr - prev) / (1000 * 3600 * 24);
+          if (diffDays === 1) {
+            consecutiveDays++;
+          } else {
+            break;
+          }
+        }
+      }
+
+      if (consecutiveDays >= 3) {
+        list.push({
+          tierClass: '',
+          badge: 'SURPRISE MILESTONE · CONSISTENCY STREAK',
+          message: `Surprise win! You've logged ${consecutiveDays} consecutive days in a row—consistency is where lasting transformation lives.`,
+          sub: `Data-driven streak detected through ${formatDateDisplay(sortedDates[sortedDates.length - 1])}`
+        });
+      }
+
+      let deficitStreak = 0;
+      for (let i = postNov17.length - 1; i >= 0; i--) {
+        const net = (postNov17[i].calories || 0) - (postNov17[i].caloriesBurned || 2000);
+        if (net < 0) {
+          deficitStreak++;
+        } else {
+          break;
+        }
+      }
+
+      if (deficitStreak >= 3) {
+        list.push({
+          tierClass: deficitStreak >= 5 ? 'tier-150' : '',
+          badge: 'SURPRISE MILESTONE · DEFICIT MOMENTUM',
+          message: `Surprise milestone! You've stacked ${deficitStreak} straight calorie-deficit days since Nov 17—your effort is compounding nicely.`,
+          sub: `Detected from recent net calorie entries`
+        });
+      }
+
+      const weekMetrics = computeLastWeekMetrics();
+      if (weekMetrics.dayCount >= 5 && weekMetrics.projectedLbs <= -0.5) {
+        list.push({
+          tierClass: 'tier-150',
+          badge: 'SURPRISE MILESTONE · STRONG 7-DAY PACE',
+          message: `Surprise data highlight! Across ${weekMetrics.dayCount} days this past week, your data points to ${weekMetrics.projectedLbs.toFixed(2)} lbs of projected change.`,
+          sub: `Based on last 7 days of logged calories & burn`
+        });
+      }
+
+      return list;
+    }
+
+    function renderCelebrationBanner() {
+      activeCelebrations = computeCelebrations();
+      const banner = document.getElementById('celebrationBanner');
+      const cycleBtn = document.getElementById('celebrationCycleBtn');
+
+      if (!activeCelebrations || activeCelebrations.length === 0) {
+        banner.style.display = 'none';
+        return;
+      }
+
+      if (celebrationIndex >= activeCelebrations.length) {
+        celebrationIndex = 0;
+      }
+
+      const item = activeCelebrations[celebrationIndex];
+      banner.className = 'celebration-banner' + (item.tierClass ? ` ${item.tierClass}` : '');
+      banner.style.display = 'block';
+      document.getElementById('celebrationBadge').innerText = item.badge;
+      document.getElementById('celebrationMessage').innerText = item.message;
+      document.getElementById('celebrationSub').innerText = item.sub || '';
+
+      if (activeCelebrations.length > 1) {
+        cycleBtn.style.display = 'inline-block';
+        cycleBtn.innerText = `Milestone ${celebrationIndex + 1}/${activeCelebrations.length} ▶`;
+      } else {
+        cycleBtn.style.display = 'none';
+      }
+    }
+
+    function cycleCelebration() {
+      if (activeCelebrations.length <= 1) return;
+      celebrationIndex = (celebrationIndex + 1) % activeCelebrations.length;
+      renderCelebrationBanner();
     }
 
     function sortEntries() {
@@ -1298,6 +1523,7 @@
     function renderAll() {
       sortEntries();
       renderDailyQuote();
+      renderCelebrationBanner();
       
       let historyTableHtml = '';
       let todayFoodTableHtml = '';
