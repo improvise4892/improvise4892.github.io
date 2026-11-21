@@ -710,13 +710,26 @@
       <label>Food Item Name:</label>
       <input type="text" id="editFoodName">
 
-      <label>Meal Type:</label>
-      <select id="editMealType">
-        <option value="Snack">Snack</option>
-        <option value="Breakfast">Breakfast</option>
-        <option value="Lunch">Lunch</option>
-        <option value="Dinner">Dinner</option>
-      </select>
+      <div class="row-grid">
+        <div>
+          <label for="editFoodDate">Day / Date:</label>
+          <select id="editFoodDate" onchange="handleEditFoodDateSelectChange()"></select>
+        </div>
+        <div>
+          <label for="editMealType">Meal Type:</label>
+          <select id="editMealType">
+            <option value="Snack">Snack</option>
+            <option value="Breakfast">Breakfast</option>
+            <option value="Lunch">Lunch</option>
+            <option value="Dinner">Dinner</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="editFoodCustomDateWrap" style="display: none;">
+        <label for="editFoodCustomDate">Pick Custom Date:</label>
+        <input type="date" id="editFoodCustomDate">
+      </div>
 
       <label>Calories:</label>
       <input type="number" id="editFoodCals">
@@ -771,10 +784,10 @@
       }
 
       const minutesSinceMidnight = hour * 60 + minute;
-      if (minutesSinceMidnight < 10 * 60) return 'Breakfast'; // Midnight to 10:00 AM
-      if (minutesSinceMidnight < 14 * 60 + 30) return 'Lunch'; // 10:00 AM to 2:30 PM
-      if (minutesSinceMidnight < 21 * 60) return 'Dinner'; // 2:30 PM to 9:00 PM
-      return 'Snack'; // 9:00 PM to Midnight
+      if (minutesSinceMidnight < 10 * 60) return 'Breakfast';
+      if (minutesSinceMidnight < 14 * 60 + 30) return 'Lunch';
+      if (minutesSinceMidnight < 21 * 60) return 'Dinner';
+      return 'Snack';
     }
 
     function applyDefaultMealTypeSelectors() {
@@ -1306,7 +1319,6 @@
         };
         entries.push(targetEntry);
       } else if (origEntry && origEntry !== targetEntry) {
-        // Merge food items and calories when moving an entry onto an existing date
         const mergedItems = [
           ...(Array.isArray(targetEntry.items) ? targetEntry.items : []),
           ...(Array.isArray(origEntry.items) ? origEntry.items : [])
@@ -1387,8 +1399,52 @@
       renderAll();
     }
 
+    function populateEditFoodDateDropdown(currentDate) {
+      const selectEl = document.getElementById('editFoodDate');
+      const customWrap = document.getElementById('editFoodCustomDateWrap');
+      const customInput = document.getElementById('editFoodCustomDate');
+      if (!selectEl) return;
+
+      const todayKey = getLocalDateKey();
+      const dateSet = new Set(entries.map(e => e.date).filter(Boolean));
+      if (currentDate) dateSet.add(currentDate);
+      if (todayKey) dateSet.add(todayKey);
+
+      const sortedDates = [...dateSet].sort((a, b) => b.localeCompare(a));
+      let html = '';
+      sortedDates.forEach((d) => {
+        const suffix = d === todayKey ? ' (Today)' : '';
+        html += `<option value="${d}">${formatDateDisplay(d)}${suffix}</option>`;
+      });
+      html += `<option value="__custom__">Custom Date...</option>`;
+
+      selectEl.innerHTML = html;
+      selectEl.value = currentDate || todayKey;
+      if (customInput) customInput.value = currentDate || todayKey;
+      if (customWrap) customWrap.style.display = 'none';
+    }
+
+    function handleEditFoodDateSelectChange() {
+      const selectEl = document.getElementById('editFoodDate');
+      const customWrap = document.getElementById('editFoodCustomDateWrap');
+      const customInput = document.getElementById('editFoodCustomDate');
+      if (!selectEl || !customWrap) return;
+
+      if (selectEl.value === '__custom__') {
+        customWrap.style.display = 'block';
+        if (customInput && !customInput.value) {
+          customInput.value = getLocalDateKey();
+        }
+      } else {
+        customWrap.style.display = 'none';
+      }
+    }
+
     function editItem(entryIndex, itemIndex) {
-      const item = entries[entryIndex].items[itemIndex];
+      const entry = entries[entryIndex];
+      if (!entry || !entry.items || !entry.items[itemIndex]) return;
+      const item = entry.items[itemIndex];
+
       document.getElementById('editEntryIdx').value = entryIndex;
       document.getElementById('editItemIdx').value = itemIndex;
       document.getElementById('editFoodName').value = item.name;
@@ -1397,12 +1453,17 @@
       document.getElementById('editProtein').value = item.protein || 0;
       document.getElementById('editFat').value = item.fat || 0;
       document.getElementById('editCarbs').value = item.carbs || 0;
+
+      populateEditFoodDateDropdown(entry.date);
       document.getElementById('editFoodModal').style.display = 'block';
     }
 
     function saveEditedFoodItem() {
       const eIdx = parseInt(document.getElementById('editEntryIdx').value, 10);
       const iIdx = parseInt(document.getElementById('editItemIdx').value, 10);
+
+      const sourceEntry = entries[eIdx];
+      if (!sourceEntry || !sourceEntry.items || !sourceEntry.items[iIdx]) return;
 
       const name = document.getElementById('editFoodName').value.trim();
       const meal = document.getElementById('editMealType').value;
@@ -1411,13 +1472,47 @@
       const fat = parseFloat(document.getElementById('editFat').value) || 0;
       const carbs = parseFloat(document.getElementById('editCarbs').value) || 0;
 
+      const dateSelectVal = document.getElementById('editFoodDate').value;
+      const targetDate = dateSelectVal === '__custom__'
+        ? document.getElementById('editFoodCustomDate').value
+        : dateSelectVal;
+
       if (!name) {
         alert("Food name cannot be empty.");
         return;
       }
 
-      entries[eIdx].items[iIdx] = { name, meal, calories, protein, fat, carbs };
-      entries[eIdx].calories = entries[eIdx].items.reduce((sum, i) => sum + i.calories, 0);
+      if (!targetDate) {
+        alert("Please select a valid date.");
+        return;
+      }
+
+      const updatedItem = { name, meal, calories, protein, fat, carbs };
+
+      if (targetDate === sourceEntry.date) {
+        sourceEntry.items[iIdx] = updatedItem;
+        sourceEntry.calories = sourceEntry.items.reduce((sum, i) => sum + i.calories, 0);
+      } else {
+        sourceEntry.items.splice(iIdx, 1);
+        sourceEntry.calories = sourceEntry.items.length > 0
+          ? sourceEntry.items.reduce((sum, i) => sum + i.calories, 0)
+          : 0;
+
+        let destEntry = entries.find(e => e.date === targetDate);
+        if (!destEntry) {
+          destEntry = {
+            date: targetDate,
+            weight: null,
+            calories: 0,
+            caloriesBurned: 2000,
+            items: []
+          };
+          entries.push(destEntry);
+        }
+        if (!destEntry.items) destEntry.items = [];
+        destEntry.items.push(updatedItem);
+        destEntry.calories = destEntry.items.reduce((sum, i) => sum + i.calories, 0);
+      }
 
       sortEntries();
       localStorage.setItem('weightData', JSON.stringify(entries));
@@ -1481,15 +1576,12 @@
             return false;
           }
 
-          // Restrict to US products
           if (!isUSProduct(prod)) return false;
 
-          // Restrict to English products/text
           const isEnglishProduct = Boolean(englishName) || prod.lang === 'en';
           if (!isEnglishProduct) return false;
           if (!isLikelyEnglishText(displayName)) return false;
 
-          // Require every search term to be in the product name
           const hasSearchTermInName = queryTerms.every(term => lowerName.includes(term));
           if (!hasSearchTermInName) return false;
 
