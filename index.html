@@ -367,6 +367,20 @@
     }
     button.delete-btn:hover { background: #e1ddd3; color: #35312b; }
 
+    button.ignore-flag-btn {
+      background: #e9f2ee;
+      color: #24574a;
+      border: 1px solid #b8d3c9;
+      padding: 3px 8px;
+      cursor: pointer;
+      border-radius: 5px;
+      width: auto;
+      margin: 0;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    button.ignore-flag-btn:hover { background: #d8e9e2; }
+
     button.edit-btn {
       background: #eef1ef;
       color: #2c3833;
@@ -501,6 +515,13 @@
       justify-content: space-between;
       gap: 10px;
       font-size: 12px;
+    }
+
+    .flagged-row-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      flex-shrink: 0;
     }
   </style>
 </head>
@@ -722,7 +743,7 @@
     <div class="modal-content">
       <h3 style="margin-top:0;">Flagged Duplicate or Unusual Entries</h3>
       <p style="font-size: 13px; color: var(--muted); margin-top: 0;">
-        Deletions on past/current history rows are only enabled when the tracker detects potential duplicates or unusual values.
+        Deletions on past/current history rows are only enabled when the tracker detects potential duplicates or unusual values, or you can ignore a flag indefinitely.
       </p>
       <div id="flaggedDeletionsList" style="max-height: 340px; overflow-y: auto; margin-top: 10px;"></div>
       <button class="secondary-btn" onclick="closeFlaggedDeletionsModal()" style="margin-top: 10px;">Close</button>
@@ -854,9 +875,11 @@
     const START_WEIGHT_DATE = '2026-11-17';
     const HISTORY_PAGE_SIZE = 10;
     const WEEKLY_EXPORT_PROMPT_KEY = 'lastWeeklyExportPromptDate';
+    const IGNORED_FLAGS_KEY = 'ignoredFlaggedEntries';
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
+    let ignoredFlagKeys = new Set(JSON.parse(localStorage.getItem(IGNORED_FLAGS_KEY)) || []);
     let chartMonth, chartYear, macroPieChart = null;
     let videoStream = null;
     let scanningActive = false;
@@ -867,6 +890,47 @@
     let historyPageOffset = 0;
     let editingEntryOriginalDate = null;
     let flaggedEntriesMap = new Map();
+
+    function getFlagSignature(entry) {
+      if (!entry) return '';
+      const wPart = entry.weight !== null && entry.weight !== undefined ? String(entry.weight) : 'null';
+      const cPart = String(entry.calories ?? 0);
+      const bPart = String(entry.caloriesBurned ?? 2000);
+      return `${entry.date || ''}|${wPart}|${cPart}|${bPart}`;
+    }
+
+    function saveIgnoredFlags() {
+      localStorage.setItem(IGNORED_FLAGS_KEY, JSON.stringify([...ignoredFlagKeys]));
+    }
+
+    function ignoreFlagIndefinitely(index) {
+      const entry = entries[index];
+      if (!entry) return;
+      const dateLabel = formatDateDisplay(entry.date);
+
+      const firstConfirm = confirm(
+        `Are you sure you want to ignore the flag for ${dateLabel} indefinitely?`
+      );
+      if (!firstConfirm) return;
+
+      const secondConfirm = confirm(
+        `Are you really, really sure you want to ignore the flag for ${dateLabel} indefinitely? It will no longer appear in flagged rows.`
+      );
+      if (!secondConfirm) return;
+
+      const sig = getFlagSignature(entry);
+      if (sig) {
+        ignoredFlagKeys.add(sig);
+        saveIgnoredFlags();
+      }
+      renderAll();
+
+      if (flaggedEntriesMap.size === 0) {
+        closeFlaggedDeletionsModal();
+      } else {
+        renderFlaggedDeletionsModalContent();
+      }
+    }
 
     function encodeUtf8Base64(str) {
       const bytes = new TextEncoder().encode(String(str ?? ''));
@@ -1577,7 +1641,8 @@
           reasons.push(`Unusual burn (${burned} cals)`);
         }
 
-        if (reasons.length > 0) {
+        const sig = getFlagSignature(entry);
+        if (reasons.length > 0 && !ignoredFlagKeys.has(sig)) {
           map.set(entry, reasons);
         }
       });
@@ -1638,7 +1703,10 @@
             <strong>${formatDateDisplay(entry.date)}</strong> · Weight: <b>${wText}</b> · Consumed: <b>${entry.calories || 0}</b> · Burn: <b>${entry.caloriesBurned || 2000}</b>
             <br><small style="color: #7c4d0e; font-weight: 600;">Flagged: ${reasons.join('; ')}</small>
           </div>
-          <button type="button" class="delete-btn" onclick="deleteFlaggedEntry(${idx})">Delete</button>
+          <div class="flagged-row-actions">
+            <button type="button" class="ignore-flag-btn" onclick="ignoreFlagIndefinitely(${idx})">Ignore Indefinitely</button>
+            <button type="button" class="delete-btn" onclick="deleteFlaggedEntry(${idx})">Delete</button>
+          </div>
         </div>`;
       });
 
@@ -1819,6 +1887,8 @@
     function clearAllData() {
       if (confirm("Are you sure you want to delete all stored entries?")) {
         entries = [];
+        ignoredFlagKeys.clear();
+        saveIgnoredFlags();
         historyPageOffset = 0;
         editingEntryOriginalDate = null;
         updateEditingBanner();
