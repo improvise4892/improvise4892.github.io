@@ -293,6 +293,20 @@
       cursor: not-allowed;
     }
 
+    button.flagged-alert-btn {
+      background: #fff6e8;
+      color: #7c4d0e;
+      border: 1px solid #e6c38c;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 7px;
+      width: auto;
+      margin: 0;
+      cursor: pointer;
+    }
+    button.flagged-alert-btn:hover { background: #fdebd0; }
+
     .history-range-label {
       font-size: 12px;
       font-weight: 600;
@@ -405,7 +419,7 @@
       display: none;
     }
 
-    #scannerModal, #dbModal, #portionModal {
+    #scannerModal, #dbModal, #portionModal, #flaggedDeletionsModal {
       display: none;
       position: fixed;
       z-index: 2000;
@@ -452,6 +466,19 @@
       border: 1px solid #bfd6cc;
       font-size: 12px;
       color: #21463b;
+    }
+
+    .flagged-row-card {
+      border: 1px solid #e6d7be;
+      background: #fdfaf3;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12px;
     }
   </style>
 </head>
@@ -610,6 +637,7 @@
       <div class="history-pager">
         <span class="history-range-label" id="historyRangeLabel">No entries yet</span>
         <div class="history-pager-buttons">
+          <button type="button" class="flagged-alert-btn" id="flaggedDeletionsBtn" style="display:none;" onclick="openFlaggedDeletionsModal()">Flagged Duplicates / Bad Rows (0)</button>
           <button type="button" class="secondary-btn" id="newerHistoryBtn" onclick="changeHistoryPage(-1)">Newer 10</button>
           <button type="button" class="secondary-btn" id="olderHistoryBtn" onclick="changeHistoryPage(1)">Older 10</button>
         </div>
@@ -648,6 +676,18 @@
       <button class="danger-outline" onclick="clearAllData()">Clear All Stored Entries</button>
     </div>
   </details>
+
+  <!-- Flagged Duplicates / Bad Data Deletion Modal -->
+  <div id="flaggedDeletionsModal">
+    <div class="modal-content">
+      <h3 style="margin-top:0;">Flagged Duplicate or Unusual Entries</h3>
+      <p style="font-size: 13px; color: var(--muted); margin-top: 0;">
+        Deletions on past/current history rows are only enabled when the tracker detects potential duplicates or unusual values.
+      </p>
+      <div id="flaggedDeletionsList" style="max-height: 340px; overflow-y: auto; margin-top: 10px;"></div>
+      <button class="secondary-btn" onclick="closeFlaggedDeletionsModal()" style="margin-top: 10px;">Close</button>
+    </div>
+  </div>
 
   <!-- Barcode Scanner Modal -->
   <div id="scannerModal">
@@ -759,6 +799,7 @@
     let celebrationIndex = 0;
     let historyPageOffset = 0;
     let editingEntryOriginalDate = null;
+    let flaggedEntriesMap = new Map();
 
     function getLocalDateKey() {
       const now = new Date();
@@ -1062,6 +1103,125 @@
 
     function sortEntries() {
       entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+
+    function detectFlaggedEntries() {
+      const map = new Map();
+      const dateCounts = new Map();
+      entries.forEach((entry) => {
+        if (!entry || !entry.date) return;
+        dateCounts.set(entry.date, (dateCounts.get(entry.date) || 0) + 1);
+      });
+
+      let prevWeight = null;
+      entries.forEach((entry, idx) => {
+        const reasons = [];
+        if (entry.date && (dateCounts.get(entry.date) || 0) > 1) {
+          reasons.push('Duplicate date');
+        }
+        if (entry.weight !== null && entry.weight !== undefined) {
+          if (isNaN(entry.weight) || entry.weight <= 0 || entry.weight > 700) {
+            reasons.push(`Unusual weight (${entry.weight} lbs)`);
+          } else if (prevWeight !== null && Math.abs(entry.weight - prevWeight) > 8) {
+            reasons.push(`Large jump (${(entry.weight - prevWeight) >= 0 ? '+' : ''}${(entry.weight - prevWeight).toFixed(1)} lbs from ${prevWeight})`);
+          }
+          if (!isNaN(entry.weight) && entry.weight > 0 && entry.weight <= 700) {
+            prevWeight = entry.weight;
+          }
+        }
+        const burned = entry.caloriesBurned || 2000;
+        if (isNaN(burned) || burned < 500 || burned > 12000) {
+          reasons.push(`Unusual burn (${burned} cals)`);
+        }
+
+        if (reasons.length > 0) {
+          map.set(entry, reasons);
+        }
+      });
+
+      return map;
+    }
+
+    function canDeleteHistoryEntry(entry) {
+      if (!entry) return false;
+      const todayKey = getLocalDateKey();
+      if (entry.date && entry.date > todayKey) return true;
+      if (flaggedEntriesMap.has(entry)) return true;
+      return false;
+    }
+
+    function updateFlaggedDeletionsButton() {
+      const btn = document.getElementById('flaggedDeletionsBtn');
+      if (!btn) return;
+      const count = flaggedEntriesMap.size;
+      if (count > 0) {
+        btn.style.display = 'inline-block';
+        btn.innerText = `Flagged Duplicates / Bad Rows (${count})`;
+      } else {
+        btn.style.display = 'none';
+      }
+    }
+
+    function openFlaggedDeletionsModal() {
+      renderFlaggedDeletionsModalContent();
+      document.getElementById('flaggedDeletionsModal').style.display = 'block';
+    }
+
+    function closeFlaggedDeletionsModal() {
+      document.getElementById('flaggedDeletionsModal').style.display = 'none';
+    }
+
+    function renderFlaggedDeletionsModalContent() {
+      const listEl = document.getElementById('flaggedDeletionsList');
+      if (!listEl) return;
+
+      const flaggedList = [];
+      entries.forEach((entry, idx) => {
+        if (flaggedEntriesMap.has(entry)) {
+          flaggedList.push({ entry, idx, reasons: flaggedEntriesMap.get(entry) });
+        }
+      });
+
+      if (flaggedList.length === 0) {
+        listEl.innerHTML = `<p style="font-size: 13px; color: var(--muted);">No duplicate or unusual rows currently flagged.</p>`;
+        return;
+      }
+
+      let html = '';
+      flaggedList.forEach(({ entry, idx, reasons }) => {
+        const wText = entry.weight !== null ? `${entry.weight} lbs` : '--';
+        html += `<div class="flagged-row-card">
+          <div>
+            <strong>${formatDateDisplay(entry.date)}</strong> · Weight: <b>${wText}</b> · Consumed: <b>${entry.calories || 0}</b> · Burn: <b>${entry.caloriesBurned || 2000}</b>
+            <br><small style="color: #7c4d0e; font-weight: 600;">Flagged: ${reasons.join('; ')}</small>
+          </div>
+          <button type="button" class="delete-btn" onclick="deleteFlaggedEntry(${idx})">Delete</button>
+        </div>`;
+      });
+
+      listEl.innerHTML = html;
+    }
+
+    function deleteFlaggedEntry(index) {
+      const entry = entries[index];
+      if (!entry || !flaggedEntriesMap.has(entry)) return;
+      const dateLabel = formatDateDisplay(entry.date);
+      if (!confirm(`Delete flagged entry for ${dateLabel}?`)) return;
+
+      if (entry.date === editingEntryOriginalDate) {
+        editingEntryOriginalDate = null;
+        updateEditingBanner();
+      }
+      entries.splice(index, 1);
+      sortEntries();
+      localStorage.setItem('weightData', JSON.stringify(entries));
+      renderAll();
+
+      if (flaggedEntriesMap.size === 0) {
+        closeFlaggedDeletionsModal();
+      } else {
+        renderFlaggedDeletionsModalContent();
+      }
     }
 
     function showStatus(message, type = 'info', elementId = 'importStatus') {
@@ -1377,11 +1537,16 @@
 
     function deleteEntry(index) {
       const entry = entries[index];
-      const dateLabel = entry ? formatDateDisplay(entry.date) : 'this entry';
+      if (!entry) return;
+      if (!canDeleteHistoryEntry(entry)) {
+        alert("Deletions on past/current history rows are only enabled for Garmin/Renpho import replacements or rows flagged as duplicate/unusual.");
+        return;
+      }
+      const dateLabel = formatDateDisplay(entry.date);
       if (!confirm(`Are you sure you want to delete the entry for ${dateLabel}?`)) {
         return;
       }
-      if (entry && entry.date === editingEntryOriginalDate) {
+      if (entry.date === editingEntryOriginalDate) {
         editingEntryOriginalDate = null;
         updateEditingBanner();
       }
@@ -1827,12 +1992,14 @@
           const headers = splitCSVLine(headerLine, delimiter).map(h => h.toLowerCase().replace(/\s+/g, ' ').replace(/^\ufeff/, '').replace(/^ï»¿/, '').trim());
           
           let addedCount = 0;
+          const importedDates = new Set();
 
           if (importType === 'garmin') {
             let dateIdx = 0;
             let totalIdx = headers.findIndex(h => h === 'total' || h.includes('total'));
             if (totalIdx === -1) totalIdx = headers.length - 1;
 
+            const byDate = new Map();
             for (let i = 1; i < lines.length; i++) {
               const cols = splitCSVLine(lines[i], delimiter);
               if (cols.length <= Math.max(dateIdx, totalIdx)) continue;
@@ -1842,21 +2009,32 @@
               if (isNaN(dailyTotal) || dailyTotal === 0) dailyTotal = 2000;
 
               if (standardizedDate) {
-                let existing = entries.find(e => e.date === standardizedDate);
-                if (existing) {
-                  existing.caloriesBurned = Math.round(dailyTotal);
-                  addedCount++;
-                } else {
-                  entries.push({
-                    date: standardizedDate,
-                    weight: null, 
-                    calories: 2200,
-                    caloriesBurned: Math.round(dailyTotal),
-                    items: []
-                  });
-                  addedCount++;
-                }
+                importedDates.add(standardizedDate);
+                byDate.set(standardizedDate, Math.round(dailyTotal));
               }
+            }
+
+            // Replace/remove existing entries only for dates present in the imported file
+            if (importedDates.size > 0) {
+              const preservedByDate = new Map();
+              entries.forEach((existing) => {
+                if (importedDates.has(existing.date) && !preservedByDate.has(existing.date)) {
+                  preservedByDate.set(existing.date, existing);
+                }
+              });
+
+              entries = entries.filter(e => !importedDates.has(e.date));
+              byDate.forEach((burnVal, dKey) => {
+                const prior = preservedByDate.get(dKey);
+                entries.push({
+                  date: dKey,
+                  weight: prior ? prior.weight : null,
+                  calories: prior ? (prior.calories || 2200) : 2200,
+                  caloriesBurned: burnVal,
+                  items: prior && Array.isArray(prior.items) ? [...prior.items] : []
+                });
+                addedCount++;
+              });
             }
           } else {
             let dateIdx = headers.findIndex(h => h.includes('date') || h.includes('time'));
@@ -1865,6 +2043,7 @@
             if (dateIdx === -1) dateIdx = 0;
             if (weightIdx === -1) weightIdx = 1;
 
+            const byDate = new Map();
             for (let i = 1; i < lines.length; i++) {
               const cols = splitCSVLine(lines[i], delimiter);
               if (cols.length <= Math.max(dateIdx, weightIdx)) continue;
@@ -1874,20 +2053,32 @@
               const weightVal = parseFloat(rawWeight);
 
               if (standardizedDate && !isNaN(weightVal) && weightVal > 0) {
-                let existing = entries.find(e => e.date === standardizedDate);
-                if (!existing) {
-                  entries.push({
-                    date: standardizedDate,
-                    weight: weightVal,
-                    calories: 2200,
-                    caloriesBurned: 2000,
-                    items: []
-                  });
-                  addedCount++;
-                } else {
-                  existing.weight = weightVal;
-                }
+                importedDates.add(standardizedDate);
+                byDate.set(standardizedDate, weightVal);
               }
+            }
+
+            // Replace/remove existing entries only for dates present in the imported file
+            if (importedDates.size > 0) {
+              const preservedByDate = new Map();
+              entries.forEach((existing) => {
+                if (importedDates.has(existing.date) && !preservedByDate.has(existing.date)) {
+                  preservedByDate.set(existing.date, existing);
+                }
+              });
+
+              entries = entries.filter(e => !importedDates.has(e.date));
+              byDate.forEach((wVal, dKey) => {
+                const prior = preservedByDate.get(dKey);
+                entries.push({
+                  date: dKey,
+                  weight: wVal,
+                  calories: prior ? (prior.calories || 2200) : 2200,
+                  caloriesBurned: prior ? (prior.caloriesBurned || 2000) : 2000,
+                  items: prior && Array.isArray(prior.items) ? [...prior.items] : []
+                });
+                addedCount++;
+              });
             }
           }
 
@@ -1895,7 +2086,7 @@
           localStorage.setItem('weightData', JSON.stringify(entries));
           renderAll();
           fileInput.value = '';
-          showStatus(`Success! Imported or updated ${addedCount} entries.`, "success", "importStatus");
+          showStatus(`Success! Imported or updated ${addedCount} entries for dates in file.`, "success", "importStatus");
         } catch (err) {
           showStatus("Error parsing file: " + err.message, "error", "importStatus");
         }
@@ -1944,6 +2135,8 @@
       renderDailyQuote();
       renderCelebrationBanner();
       updateEditingBanner();
+      flaggedEntriesMap = detectFlaggedEntries();
+      updateFlaggedDeletionsButton();
       
       let historyTableHtml = '';
       let todayFoodTableHtml = '';
@@ -2008,6 +2201,12 @@
             }
           }
 
+          const allowDelete = canDeleteHistoryEntry(entry);
+          const isFlagged = flaggedEntriesMap.has(entry);
+          const deleteBtnHtml = allowDelete
+            ? `<button class="delete-btn" onclick="deleteEntry(${idx})">${isFlagged ? 'Del (Flagged)' : 'Delete'}</button>`
+            : '';
+
           historyTableHtml += `<tr>
             <td>${formatDateDisplay(entry.date)}</td>
             <td>${entry.weight !== null ? entry.weight : '--'}</td>
@@ -2017,7 +2216,7 @@
             <td style="font-weight: bold;">${actualStr}</td>
             <td>
               <button class="edit-btn" onclick="editEntry(${idx})">Edit</button>
-              <button class="delete-btn" onclick="deleteEntry(${idx})">Delete</button>
+              ${deleteBtnHtml}
             </td>
           </tr>`;
         }
