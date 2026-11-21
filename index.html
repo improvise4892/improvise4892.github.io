@@ -8,34 +8,302 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 700px; margin: auto; }
-    input, select, button, textarea { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
-    .card { background: #f9f9f9; padding: 15px; margin-top: 15px; border-radius: 8px; border: 1px solid #ddd; }
-    .quote-banner { background: #eef6ff; border-left: 4px solid #007bff; padding: 12px 16px; border-radius: 6px; margin-bottom: 14px; font-style: italic; color: #1e3a5f; }
-    .quote-author { display: block; margin-top: 6px; font-style: normal; font-size: 12px; font-weight: bold; color: #4a6b8c; }
-    .chart-container { position: relative; width: 100%; margin-top: 25px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #eee; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-    th, td { border: 1px solid #ddd; padding: 6px; text-align: center; }
-    th { background: #f1f1f1; }
-    details { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 10px 15px; margin-top: 15px; }
-    summary { font-weight: bold; cursor: pointer; font-size: 15px; color: #333; }
-    button.delete-btn { background: #ff4d4d; color: white; border: none; padding: 4px 8px; cursor: pointer; border-radius: 4px; width: auto; }
-    button.delete-btn:hover { background: #cc0000; }
-    button.edit-btn { background: #ffc107; color: #333; border: none; padding: 4px 8px; cursor: pointer; border-radius: 4px; width: auto; margin-right: 2px; }
-    button.edit-btn:hover { background: #e0a800; }
-    button.secondary-btn { background: #6c757d; color: white; border: none; margin-top: 5px; cursor: pointer; }
-    button.secondary-btn:hover { background: #5a6268; }
-    button.primary-btn { background: #007bff; color: white; border: none; cursor: pointer; }
-    button.primary-btn:hover { background: #0056b3; }
-    button.danger-outline { background: white; color: #cc0000; border: 1px solid #cc0000; margin-top: 8px; cursor: pointer; }
-    button.danger-outline:hover { background: #fff0f0; }
-    #importStatus, #scannerStatus, #dbStatus { font-size: 14px; margin-top: 8px; font-weight: bold; padding: 6px; border-radius: 4px; display: none; }
-    
-    #scannerModal, #dbModal, #portionModal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); }
-    .modal-content { background: #fff; margin: 10% auto; padding: 20px; width: 90%; max-width: 500px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); max-height: 80vh; overflow-y: auto; z-index: 2100; position: relative; }
-    .search-result-item { background: #f1f1f1; padding: 10px; margin: 6px 0; border-radius: 4px; cursor: pointer; font-size: 13px; text-align: left; border: 1px solid #ccc; }
-    .search-result-item:hover { background: #e2e6ea; }
-    h3.chart-title { margin-bottom: 5px; font-size: 16px; color: #333; }
+    :root {
+      --bg-top: #eef3ef;
+      --bg-bottom: #f6f3ec;
+      --surface: rgba(255, 255, 255, 0.92);
+      --surface-tint: rgba(248, 250, 248, 0.92);
+      --ink: #1f2925;
+      --muted: #5b6862;
+      --border: #dce3de;
+      --accent: #2f6f5e;
+      --accent-hover: #24574a;
+      --accent-soft: #e6f0ec;
+      --warm-soft: #fbf4ea;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 24px 16px 48px;
+      max-width: 720px;
+      margin: auto;
+      color: var(--ink);
+      background-color: var(--bg-bottom);
+      background-image:
+        radial-gradient(circle at 12% 8%, rgba(47, 111, 94, 0.08) 0%, transparent 45%),
+        radial-gradient(circle at 88% 18%, rgba(214, 168, 108, 0.11) 0%, transparent 42%),
+        radial-gradient(rgba(47, 111, 94, 0.07) 1px, transparent 1px),
+        linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 55%);
+      background-size: 100% 100%, 100% 100%, 22px 22px, 100% 100%;
+      min-height: 100vh;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 1.55rem;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+      color: var(--ink);
+    }
+
+    h4 {
+      margin: 0 0 8px;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    input, select, button, textarea {
+      width: 100%;
+      padding: 9px 11px;
+      margin: 4px 0 6px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--ink);
+      font-size: 14px;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(47, 111, 94, 0.14);
+    }
+
+    .card {
+      background: var(--surface);
+      backdrop-filter: blur(6px);
+      padding: 14px 16px;
+      margin-top: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 14px rgba(24, 39, 33, 0.04);
+    }
+
+    .card-food {
+      background: linear-gradient(180deg, rgba(255, 252, 247, 0.95) 0%, var(--warm-soft) 100%);
+    }
+
+    .card-weight {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, var(--accent-soft) 100%);
+    }
+
+    .quote-banner {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(230, 240, 236, 0.9) 100%);
+      border: 1px solid #cfe0d9;
+      border-left: 4px solid var(--accent);
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      font-style: italic;
+      color: #1f3a32;
+      box-shadow: 0 3px 10px rgba(31, 58, 50, 0.05);
+    }
+
+    .quote-author {
+      display: block;
+      margin-top: 5px;
+      font-style: normal;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .chart-container {
+      position: relative;
+      width: 100%;
+      margin-top: 16px;
+      background: var(--surface);
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 14px rgba(24, 39, 33, 0.04);
+    }
+
+    h3.chart-title {
+      margin-bottom: 8px;
+      font-size: 0.98rem;
+      color: var(--ink);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 12px;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    th, td {
+      border: 1px solid #e5ebe7;
+      padding: 7px 6px;
+      text-align: center;
+    }
+
+    th {
+      background: #f2f6f4;
+      color: #314039;
+      font-weight: 600;
+    }
+
+    details {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 11px 16px;
+      margin-top: 14px;
+      box-shadow: 0 4px 14px rgba(24, 39, 33, 0.04);
+    }
+
+    summary {
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.96rem;
+      color: var(--ink);
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    summary::-webkit-details-marker { display: none; }
+
+    summary::after {
+      content: "＋";
+      font-size: 15px;
+      color: var(--muted);
+      font-weight: 500;
+      margin-left: 8px;
+    }
+
+    details[open] > summary::after {
+      content: "－";
+    }
+
+    .row-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+    }
+
+    button.delete-btn {
+      background: #dc4c4c;
+      color: white;
+      border: none;
+      padding: 4px 8px;
+      cursor: pointer;
+      border-radius: 5px;
+      width: auto;
+      font-size: 12px;
+    }
+    button.delete-btn:hover { background: #b83737; }
+
+    button.edit-btn {
+      background: #eab308;
+      color: #1f2925;
+      border: none;
+      padding: 4px 8px;
+      cursor: pointer;
+      border-radius: 5px;
+      width: auto;
+      margin-right: 3px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    button.edit-btn:hover { background: #ca9a04; }
+
+    button.secondary-btn {
+      background: #64746e;
+      color: white;
+      border: none;
+      margin-top: 6px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button.secondary-btn:hover { background: #505f59; }
+
+    button.primary-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.primary-btn:hover { background: var(--accent-hover); }
+
+    button.danger-outline {
+      background: #fff;
+      color: #b83737;
+      border: 1px solid #e2b4b4;
+      margin-top: 8px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button.danger-outline:hover { background: #fdf2f2; }
+
+    #importStatus, #scannerStatus, #dbStatus {
+      font-size: 13px;
+      margin-top: 8px;
+      font-weight: 600;
+      padding: 7px 10px;
+      border-radius: 7px;
+      display: none;
+    }
+
+    #scannerModal, #dbModal, #portionModal {
+      display: none;
+      position: fixed;
+      z-index: 2000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(18, 28, 24, 0.58);
+      backdrop-filter: blur(2px);
+    }
+
+    .modal-content {
+      background: #fff;
+      margin: 8% auto;
+      padding: 20px;
+      width: 92%;
+      max-width: 500px;
+      border-radius: 12px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+      max-height: 82vh;
+      overflow-y: auto;
+      z-index: 2100;
+      position: relative;
+    }
+
+    .search-result-item {
+      background: #f6f9f7;
+      padding: 10px;
+      margin: 6px 0;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 13px;
+      text-align: left;
+      border: 1px solid var(--border);
+    }
+    .search-result-item:hover { background: var(--accent-soft); border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -47,90 +315,106 @@
 
   <h2>Weight & Calorie Tracker</h2>
 
-  <!-- File Import Box -->
-  <div class="card" style="background: #f0f7ff;">
-    <h3 style="margin-top:0;">Import CSV File</h3>
-    
-    <label style="font-size: 13px; font-weight: bold;">Select Data Type:</label>
-    <select id="importType">
-      <option value="renpho">Renpho Weight CSV</option>
-      <option value="garmin">Garmin Calories CSV</option>
-    </select>
+  <!-- Collapsible CSV Import Box -->
+  <details>
+    <summary>📂 Import CSV File (Renpho / Garmin)</summary>
+    <div style="margin-top: 10px;">
+      <label>Select Data Type:</label>
+      <select id="importType">
+        <option value="renpho">Renpho Weight CSV</option>
+        <option value="garmin">Garmin Calories CSV</option>
+      </select>
 
-    <input type="file" id="csvFile" accept="*">
-    <button class="primary-btn" onclick="handleFileImport()">Import Selected File</button>
-    
-    <div id="importStatus"></div>
-    <button class="danger-outline" onclick="clearAllData()">Clear All Stored Entries</button>
-  </div>
+      <input type="file" id="csvFile" accept="*">
+      <button class="primary-btn" onclick="handleFileImport()">Import Selected File</button>
+      
+      <div id="importStatus"></div>
+      <button class="danger-outline" onclick="clearAllData()">Clear All Stored Entries</button>
+    </div>
+  </details>
 
   <!-- Food Logging Box -->
-  <div class="card" style="background: #fdf6f0;">
-    <h3 style="margin-top:0;">🥗 Food Logger (Search, Scan, or Manual)</h3>
+  <div class="card card-food">
+    <h3>🥗 Food Logger</h3>
     
-    <label style="font-size: 13px; font-weight: bold;">Search Food Database:</label>
-    <div style="display: flex; gap: 6px;">
-      <input type="text" id="dbSearchQuery" placeholder="e.g. apple, oats, protein bar...">
-      <button class="primary-btn" style="background: #28a745; width: 140px; margin-top: 6px;" onclick="searchFoodDatabase()">Search</button>
+    <label>Search Food Database:</label>
+    <div style="display: flex; gap: 8px; align-items: center;">
+      <input type="text" id="dbSearchQuery" placeholder="e.g. apple, oats, protein bar..." style="margin: 4px 0;">
+      <button class="primary-btn" style="width: 120px; margin: 4px 0; flex-shrink: 0;" onclick="searchFoodDatabase()">Search</button>
     </div>
     <div id="dbStatus"></div>
 
-    <label style="font-size: 13px; font-weight: bold; margin-top: 10px; display: block;">Barcode Scanner:</label>
-    <button class="primary-btn" style="background: #fd7e14;" onclick="startBarcodeScanner()">📷 Scan Barcode via Camera</button>
+    <button class="secondary-btn" style="background: #c96a2b;" onclick="startBarcodeScanner()">📷 Scan Barcode via Camera</button>
     <div id="scannerStatus"></div>
 
-    <hr style="margin: 15px 0; border: 0; border-top: 1px solid #ddd;">
+    <details style="margin-top: 12px; padding: 9px 12px; background: rgba(255,255,255,0.75);">
+      <summary style="font-size: 0.88rem; color: var(--muted);">✏️ Or Add Food Manually</summary>
+      <div style="margin-top: 8px;">
+        <div class="row-grid">
+          <div>
+            <label>Food Item:</label>
+            <input type="text" id="manualFoodName" placeholder="e.g., Chewy bar">
+          </div>
+          <div>
+            <label>Meal Type:</label>
+            <select id="manualMealType">
+              <option value="Snack">Snack</option>
+              <option value="Breakfast">Breakfast</option>
+              <option value="Lunch">Lunch</option>
+              <option value="Dinner">Dinner</option>
+            </select>
+          </div>
+        </div>
 
-    <h4 style="margin: 0 0 8px 0;">Or Add Manually:</h4>
-    <label>Food Item Description:</label>
-    <input type="text" id="manualFoodName" placeholder="e.g., Chewy bar">
+        <label>Calories:</label>
+        <input type="number" id="manualFoodCals" placeholder="e.g., 150">
 
-    <label>Meal Type:</label>
-    <select id="manualMealType">
-      <option value="Snack">Snack</option>
-      <option value="Breakfast">Breakfast</option>
-      <option value="Lunch">Lunch</option>
-      <option value="Dinner">Dinner</option>
-    </select>
+        <div class="row-grid" style="grid-template-columns: repeat(3, 1fr);">
+          <div><label>Protein (g):</label><input type="number" id="manualProtein" step="0.1" value="0"></div>
+          <div><label>Fat (g):</label><input type="number" id="manualFat" step="0.1" value="0"></div>
+          <div><label>Carbs (g):</label><input type="number" id="manualCarbs" step="0.1" value="0"></div>
+        </div>
 
-    <label>Calories:</label>
-    <input type="number" id="manualFoodCals" placeholder="e.g., 150">
-
-    <div style="display: flex; gap: 10px;">
-      <div style="flex: 1;"><label style="font-size: 11px;">Protein (g):</label><input type="number" id="manualProtein" step="0.1" value="0"></div>
-      <div style="flex: 1;"><label style="font-size: 11px;">Fat (g):</label><input type="number" id="manualFat" step="0.1" value="0"></div>
-      <div style="flex: 1;"><label style="font-size: 11px;">Carbs (g):</label><input type="number" id="manualCarbs" step="0.1" value="0"></div>
-    </div>
-
-    <button class="primary-btn" style="background: #28a745; margin-top: 10px;" onclick="addManualFoodItem()">Add Food Item to Log</button>
+        <button class="primary-btn" style="margin-top: 6px;" onclick="addManualFoodItem()">Add Food Item to Log</button>
+      </div>
+    </details>
   </div>
   
   <!-- Weight & Calories Burned Log Box -->
-  <div class="card" style="background: #f4fdf4;">
-    <h3 style="margin-top:0;">⚖️ Log Weight & Burned Calories</h3>
+  <div class="card card-weight">
+    <h3>⚖️ Log Weight & Burned Calories</h3>
     
-    <label>Date:</label>
-    <input type="date" id="date">
-    
-    <label>Weight (lbs) [Optional]:</label>
-    <input type="number" step="0.1" id="weight" placeholder="e.g., 150">
+    <div class="row-grid">
+      <div>
+        <label>Date:</label>
+        <input type="date" id="date">
+      </div>
+      <div>
+        <label>Weight (lbs) [Optional]:</label>
+        <input type="number" step="0.1" id="weight" placeholder="e.g., 150">
+      </div>
+      <div>
+        <label>Calories Burned (Optional):</label>
+        <input type="number" id="caloriesBurned" placeholder="Default: 2000">
+      </div>
+    </div>
 
-    <label>Calories Burned (optional):</label>
-    <input type="number" id="caloriesBurned" placeholder="Defaults to 2000 if blank">
-
-    <button class="primary-btn" style="background: #007bff;" onclick="saveWeightAndBurned()">Save Weight & Burned Entry</button>
+    <button class="primary-btn" style="margin-top: 8px;" onclick="saveWeightAndBurned()">Save Weight & Burned Entry</button>
   </div>
 
-  <div class="card" id="statsCard" style="display:none;">
-    <h3>Trend Analysis (Chained From Nov 17 Weight)</h3>
-    <p><strong>Expected Weight in 4 Weeks:</strong> <span id="proj4Weeks">--</span> lbs</p>
-    <ul>
-      <li><strong>Today's Est. Change:</strong> <span id="change1Day">--</span> lbs</li>
-      <li><strong>Past 3 Days Est. Change:</strong> <span id="change3Days">--</span> lbs</li>
-      <li><strong>Past Week Est. Change:</strong> <span id="change1Week">--</span> lbs</li>
-      <li><strong>Past Month Est. Change:</strong> <span id="change1Month">--</span> lbs</li>
-    </ul>
-  </div>
+  <!-- Collapsible Trend Analysis -->
+  <details id="statsCard" style="display:none;">
+    <summary>🎯 Trend Analysis (Chained From Nov 17 Weight)</summary>
+    <div style="margin-top: 10px;">
+      <p style="margin: 6px 0;"><strong>Expected Weight in 4 Weeks:</strong> <span id="proj4Weeks">--</span> lbs</p>
+      <ul style="margin: 6px 0 0; padding-left: 20px; font-size: 14px; color: var(--muted);">
+        <li><strong>Today's Est. Change:</strong> <span id="change1Day">--</span> lbs</li>
+        <li><strong>Past 3 Days Est. Change:</strong> <span id="change3Days">--</span> lbs</li>
+        <li><strong>Past Week Est. Change:</strong> <span id="change1Week">--</span> lbs</li>
+        <li><strong>Past Month Est. Change:</strong> <span id="change1Month">--</span> lbs</li>
+      </ul>
+    </div>
+  </details>
 
   <!-- Two Charts: Past Month & Past Year -->
   <div class="chart-container">
@@ -151,11 +435,11 @@
       <button class="secondary-btn" style="margin:0; width: auto; padding: 6px 12px;" onclick="changeDay(1)">Next Day ▶</button>
     </div>
 
-    <div style="margin-top: 15px;">
-      <p style="font-size: 13px; color: #555; margin-bottom: 5px;">Total Consumed Today: <b id="todayTotalCals">0</b> cals</p>
+    <div style="margin-top: 14px;">
+      <p style="font-size: 13px; color: var(--muted); margin-bottom: 5px;">Total Consumed Today: <b id="todayTotalCals" style="color: var(--ink);">0</b> cals</p>
       
       <!-- Macro Pie Chart Container -->
-      <div style="max-width: 250px; margin: 15px auto; position: relative;">
+      <div style="max-width: 240px; margin: 14px auto; position: relative;">
         <canvas id="macroPieChart"></canvas>
       </div>
 
@@ -222,10 +506,10 @@
       <h3 style="margin-top:0;" id="portionFoodTitle">Adjust Portion</h3>
       <p style="font-size: 13px; color: #666;">Database nutritional values are per 100g. Enter how many grams you ate OR a fraction/multiplier.</p>
       
-      <label style="font-size: 12px; font-weight: bold;">Amount in Grams (e.g. 150):</label>
+      <label>Amount in Grams (e.g. 150):</label>
       <input type="number" id="portionGrams" placeholder="e.g. 150" oninput="calculatePortionFromGrams()">
 
-      <label style="font-size: 12px; font-weight: bold;">OR Fraction / Multiplier (e.g. 0.5 or 1/2):</label>
+      <label>OR Fraction / Multiplier (e.g. 0.5 or 1/2):</label>
       <input type="text" id="portionMultiplier" value="1" placeholder="e.g. 0.5" oninput="calculatePortionFromMultiplier()">
 
       <p style="font-size: 14px; margin-top: 10px;">
@@ -239,7 +523,7 @@
   </div>
 
   <!-- Edit Food Item Modal -->
-  <div id="editFoodModal" style="display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6);">
+  <div id="editFoodModal" style="display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(18,28,24,0.58);">
     <div class="modal-content">
       <h3 style="margin-top:0;">Edit Food Item</h3>
       <input type="hidden" id="editEntryIdx">
@@ -259,10 +543,10 @@
       <label>Calories:</label>
       <input type="number" id="editFoodCals">
 
-      <div style="display: flex; gap: 10px;">
-        <div style="flex: 1;"><label style="font-size: 11px;">Protein (g):</label><input type="number" id="editProtein" step="0.1"></div>
-        <div style="flex: 1;"><label style="font-size: 11px;">Fat (g):</label><input type="number" id="editFat" step="0.1"></div>
-        <div style="flex: 1;"><label style="font-size: 11px;">Carbs (g):</label><input type="number" id="editCarbs" step="0.1"></div>
+      <div class="row-grid" style="grid-template-columns: repeat(3, 1fr);">
+        <div><label>Protein (g):</label><input type="number" id="editProtein" step="0.1"></div>
+        <div><label>Fat (g):</label><input type="number" id="editFat" step="0.1"></div>
+        <div><label>Carbs (g):</label><input type="number" id="editCarbs" step="0.1"></div>
       </div>
 
       <button class="primary-btn" onclick="saveEditedFoodItem()" style="margin-top: 10px;">Save Changes</button>
@@ -412,8 +696,8 @@
         data: {
           labels: [],
           datasets: [
-            { label: 'Weight', data: [], borderColor: 'blue', backgroundColor: 'blue', pointRadius: 3, fill: false, spanGaps: true },
-            { label: 'Projected Weight (From Nov 17)', data: [], borderColor: 'red', backgroundColor: 'red', pointRadius: 3, pointStyle: 'circle', fill: false, spanGaps: true }
+            { label: 'Weight', data: [], borderColor: '#2563eb', backgroundColor: '#2563eb', pointRadius: 3, fill: false, spanGaps: true },
+            { label: 'Projected Weight (From Nov 17)', data: [], borderColor: '#dc2626', backgroundColor: '#dc2626', pointRadius: 3, pointStyle: 'circle', fill: false, spanGaps: true }
           ]
         },
         options: commonChartOptions
