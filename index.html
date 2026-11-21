@@ -430,6 +430,17 @@
       line-height: 1.45;
     }
 
+    .api-unit-note {
+      font-size: 12px;
+      color: #24574a;
+      background: #eef6f2;
+      border: 1px solid #c7dfd6;
+      border-radius: 7px;
+      padding: 7px 10px;
+      margin: 6px 0 8px;
+      line-height: 1.4;
+    }
+
     #scannerModal, #dbModal, #portionModal, #flaggedDeletionsModal {
       display: none;
       position: fixed;
@@ -675,23 +686,14 @@
     <summary>Backup, Restore & CSV Import (Browser Storage)</summary>
     <div style="margin-top: 10px;">
       <div class="storage-note">
-        <strong>Where your data lives:</strong> Stored locally in this browser (<code>localStorage</code> under <code>weightData</code>). CSV backups include a lossless <code>food_items_b64</code> column so individual food items and macros restore accurately on any device.
+        <strong>Phone storage note:</strong> Mobile browsers save downloads to your local Downloads folder or SD card rather than directly into Google Drive—to put a <code>.json</code> backup into Google Drive, download it locally and upload/share it to Drive. Weekly export reminders prompt you every 7 days.
       </div>
-
-      <label for="backupDestinationSelect">Where Should CSV Backups Be Stored?</label>
-      <div style="display: flex; gap: 8px; align-items: center;">
-        <select id="backupDestinationSelect" style="margin: 4px 0;" onchange="saveBackupDestinationSetting()">
-          <option value="google_drive">Google Drive (Save under my files)</option>
-          <option value="local_download">Download Locally to Device</option>
-        </select>
-        <button type="button" class="secondary-btn" style="width: 150px; margin: 4px 0; flex-shrink: 0;" onclick="promptAndExportCsvDestination()">Export CSV Now</button>
-      </div>
-      <div style="font-size: 12px; color: var(--muted); margin-bottom: 6px;" id="backupDestinationMeta">Destination: <b>Google Drive (Save under my files)</b></div>
 
       <div class="row-grid">
-        <button type="button" class="primary-btn" onclick="downloadBackupJson()">Download Backup (JSON)</button>
-        <button type="button" class="secondary-btn" onclick="downloadBackupCsv()">Download Backup (CSV)</button>
+        <button type="button" class="primary-btn" onclick="downloadBackupJson()">Download Backup (.json)</button>
+        <button type="button" class="secondary-btn" onclick="promptWeeklyExport(true)">Check Weekly Export Prompt</button>
       </div>
+      <div style="font-size: 12px; color: var(--muted); margin-bottom: 6px;" id="weeklyBackupMeta">Weekly Backup Reminder: Active (every 7 days)</div>
 
       <label for="restoreBackupFile">Restore From JSON or CSV Backup:</label>
       <input type="file" id="restoreBackupFile" accept=".json,.csv,application/json,text/csv">
@@ -748,11 +750,12 @@
     </div>
   </div>
 
-  <!-- Portion / Gram Scaling Modal -->
+  <!-- Portion / Gram & Cup/Tablespoon Scaling Modal -->
   <div id="portionModal">
     <div class="modal-content">
       <h3 style="margin-top:0;" id="portionFoodTitle">Adjust Portion</h3>
-      <p style="font-size: 13px; color: #666;">Database nutritional values are per 100g. Enter how many grams you ate OR a fraction/multiplier.</p>
+      <p style="font-size: 13px; color: #666;">Database nutrition values are per 100g. Enter grams, cups, tablespoons, or a multiplier.</p>
+      <div class="api-unit-note" id="apiUnitSourceNote">API unit info: Checking product serving/measure data...</div>
 
       <label>Meal Type:</label>
       <select id="portionMealType">
@@ -761,11 +764,35 @@
         <option value="Lunch">Lunch</option>
         <option value="Dinner">Dinner</option>
       </select>
-      
-      <label>Amount in Grams (e.g. 150):</label>
-      <input type="text" inputmode="decimal" id="portionGrams" placeholder="e.g. 150" oninput="calculatePortionFromGrams()">
 
-      <label>OR Fraction / Multiplier (e.g. 0.5 or 1/2):</label>
+      <div class="row-grid">
+        <div>
+          <label>Measure Unit:</label>
+          <select id="portionUnitType" onchange="handlePortionUnitChange()">
+            <option value="grams">Grams (g)</option>
+            <option value="cups">Cups</option>
+            <option value="tablespoons">Tablespoons (tbsp)</option>
+            <option value="multiplier">Multiplier / Fraction</option>
+          </select>
+        </div>
+        <div>
+          <label id="portionUnitAmountLabel">Amount (g):</label>
+          <input type="text" inputmode="decimal" id="portionUnitAmount" value="100" oninput="calculateFromSelectedUnit()">
+        </div>
+      </div>
+
+      <div class="row-grid" id="gramsPerUnitRow">
+        <div>
+          <label id="gramsPerUnitLabel">Grams per Cup (g):</label>
+          <input type="text" inputmode="decimal" id="gramsPerUnitInput" value="240" oninput="calculateFromSelectedUnit()">
+        </div>
+        <div>
+          <label>Equivalent Grams:</label>
+          <input type="text" inputmode="decimal" id="portionGrams" value="100" oninput="calculatePortionFromGrams()">
+        </div>
+      </div>
+
+      <label>Fraction / Multiplier (e.g. 0.5 or 1/2):</label>
       <input type="text" id="portionMultiplier" value="1" placeholder="e.g. 0.5" oninput="calculatePortionFromMultiplier()">
 
       <p style="font-size: 14px; margin-top: 10px;">
@@ -826,7 +853,8 @@
   <script>
     const START_WEIGHT_DATE = '2026-11-17';
     const HISTORY_PAGE_SIZE = 10;
-    const BACKUP_DESTINATION_KEY = 'trackerBackupDestination';
+    const WEEKLY_EXPORT_PROMPT_KEY = 'lastWeeklyExportPromptDate';
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
     let chartMonth, chartYear, macroPieChart = null;
@@ -967,6 +995,8 @@
         { id: 'manualProtein', label: 'Protein' },
         { id: 'manualFat', label: 'Fat' },
         { id: 'manualCarbs', label: 'Carbs' },
+        { id: 'portionUnitAmount', label: 'Portion Amount' },
+        { id: 'gramsPerUnitInput', label: 'Grams per Unit' },
         { id: 'portionGrams', label: 'Portion Grams' },
         { id: 'editFoodCals', label: 'Calories' },
         { id: 'editProtein', label: 'Protein' },
@@ -986,118 +1016,6 @@
           }
         });
       });
-    }
-
-    function getBackupDestination() {
-      return localStorage.getItem(BACKUP_DESTINATION_KEY) || 'google_drive';
-    }
-
-    function saveBackupDestinationSetting() {
-      const selectEl = document.getElementById('backupDestinationSelect');
-      if (!selectEl) return;
-      const dest = selectEl.value;
-      localStorage.setItem(BACKUP_DESTINATION_KEY, dest);
-      renderBackupDestinationMeta();
-      const label = dest === 'google_drive' ? 'Google Drive (Save under my files)' : 'Download Locally to Device';
-      showStatus(`Backup destination set to: ${label}`, 'info', 'backupStatus');
-    }
-
-    function renderBackupDestinationMeta() {
-      const dest = getBackupDestination();
-      const metaEl = document.getElementById('backupDestinationMeta');
-      const selectEl = document.getElementById('backupDestinationSelect');
-      if (selectEl) selectEl.value = dest;
-      if (metaEl) {
-        const text = dest === 'google_drive'
-          ? 'Google Drive (Save under my files)'
-          : 'Download Locally to Device';
-        metaEl.innerHTML = `CSV Backup Destination: <b>${text}</b>`;
-      }
-    }
-
-    function promptAndExportCsvDestination() {
-      const currentDest = getBackupDestination();
-      const choice = prompt(
-        'Where would you like your CSV backup stored?\nType "drive" for Google Drive (save under my files) or "local" to download locally:',
-        currentDest === 'local_download' ? 'local' : 'drive'
-      );
-
-      if (choice === null) return;
-      const normalized = choice.trim().toLowerCase();
-      let selectedDest = currentDest;
-      if (normalized.startsWith('drive') || normalized.includes('google')) {
-        selectedDest = 'google_drive';
-      } else if (normalized.startsWith('local') || normalized.startsWith('down')) {
-        selectedDest = 'local_download';
-      } else {
-        alert('Please enter "drive" for Google Drive or "local" for a local download, and try again.');
-        return;
-      }
-
-      localStorage.setItem(BACKUP_DESTINATION_KEY, selectedDest);
-      renderBackupDestinationMeta();
-      exportCsvToChosenDestination(selectedDest);
-    }
-
-    function exportCsvToChosenDestination(dest = null) {
-      const targetDest = dest || getBackupDestination();
-      const csv = buildFullBackupCsv();
-      const filename = `weight-calorie-backup-${getLocalDateKey()}.csv`;
-      const totalItems = entries.reduce((sum, e) => sum + (Array.isArray(e.items) ? e.items.length : 0), 0);
-
-      if (targetDest === 'google_drive') {
-        triggerFileDownload(filename, csv, 'text/csv;charset=utf-8;');
-        showStatus(
-          `CSV prepared (${filename}) with ${entries.length} days and ${totalItems} food items for Google Drive ("My Drive" / your files). Download started—you can also ask me to save a copy directly into your Google Drive files.`,
-          'success',
-          'backupStatus'
-        );
-      } else {
-        triggerFileDownload(filename, csv, 'text/csv;charset=utf-8;');
-        showStatus(`CSV backup downloaded (${filename}) with ${entries.length} days and ${totalItems} food items.`, 'success', 'backupStatus');
-      }
-    }
-
-    function escapeCsvField(val) {
-      const s = String(val ?? '');
-      if (/[",\n\r]/.test(s)) {
-        return `"${s.replace(/"/g, '""')}"`;
-      }
-      return s;
-    }
-
-    function buildFullBackupCsv() {
-      const headers = [
-        'date',
-        'weight_lbs',
-        'calories_consumed',
-        'calories_burned',
-        'food_item_count',
-        'food_items_summary',
-        'food_items_b64'
-      ];
-      const lines = [headers.join(',')];
-
-      entries.forEach((entry) => {
-        const items = normalizeFoodItemsArray(entry.items);
-        const consumed = items.length > 0
-          ? items.reduce((s, x) => s + x.calories, 0)
-          : (parseStrictNonNegativeNumber(entry.calories) || 0);
-        const summary = items.map((it) => `${it.name} (${it.meal}, ${it.calories} cal)`).join(' | ');
-        const b64Payload = encodeUtf8Base64(JSON.stringify(items));
-
-        lines.push([
-          escapeCsvField(entry.date || ''),
-          escapeCsvField(entry.weight !== null && entry.weight !== undefined ? entry.weight : ''),
-          escapeCsvField(consumed),
-          escapeCsvField(entry.caloriesBurned ?? 2000),
-          escapeCsvField(items.length),
-          escapeCsvField(summary),
-          escapeCsvField(b64Payload)
-        ].join(','));
-      });
-
-      return lines.join('\n');
     }
 
     function triggerFileDownload(filename, content, mimeType) {
@@ -1134,11 +1052,55 @@
         JSON.stringify(payload, null, 2),
         'application/json'
       );
-      showStatus(`JSON backup downloaded with ${normalizedEntries.length} days and ${totalItems} food items.`, 'success', 'backupStatus');
+      localStorage.setItem(WEEKLY_EXPORT_PROMPT_KEY, new Date().toISOString());
+      renderWeeklyBackupMeta();
+      showStatus(`.json backup downloaded with ${normalizedEntries.length} days and ${totalItems} food items.`, 'success', 'backupStatus');
     }
 
-    function downloadBackupCsv() {
-      exportCsvToChosenDestination(getBackupDestination());
+    function renderWeeklyBackupMeta() {
+      const el = document.getElementById('weeklyBackupMeta');
+      if (!el) return;
+      const lastIso = localStorage.getItem(WEEKLY_EXPORT_PROMPT_KEY);
+      if (!lastIso) {
+        el.innerText = 'Weekly Backup Reminder: Due on next check-in (every 7 days)';
+        return;
+      }
+      const d = new Date(lastIso);
+      if (isNaN(d.getTime())) {
+        el.innerText = 'Weekly Backup Reminder: Active (every 7 days)';
+        return;
+      }
+      const nextDate = new Date(d.getTime() + SEVEN_DAYS_MS);
+      const nextKey = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`;
+      el.innerText = `Weekly Backup Reminder: Last prompted ${formatDateDisplay(d.toISOString().slice(0, 10))} · Next due ${formatDateDisplay(nextKey)}`;
+    }
+
+    function promptWeeklyExport(forcePrompt = false) {
+      if (entries.length === 0 && !forcePrompt) return;
+      const lastIso = localStorage.getItem(WEEKLY_EXPORT_PROMPT_KEY);
+      const nowMs = Date.now();
+      let isDue = forcePrompt;
+
+      if (!lastIso) {
+        isDue = true;
+      } else {
+        const lastMs = new Date(lastIso).getTime();
+        if (isNaN(lastMs) || (nowMs - lastMs) >= SEVEN_DAYS_MS) {
+          isDue = true;
+        }
+      }
+
+      if (!isDue) return;
+
+      const wantsExport = confirm(
+        'Weekly Backup Check-In: Would you like to export/download your tracker data as a .json backup file now? (After downloading locally, you can upload or share it to Google Drive.)'
+      );
+      localStorage.setItem(WEEKLY_EXPORT_PROMPT_KEY, new Date().toISOString());
+      renderWeeklyBackupMeta();
+
+      if (wantsExport) {
+        downloadBackupJson();
+      }
     }
 
     function parseFoodItemsFromCsvRow(cols, b64Idx, legacyItemsIdx) {
@@ -1873,6 +1835,7 @@
       applyDefaultMealTypeSelectors();
       initCharts();
       renderAll();
+      promptWeeklyExport(false);
     }
 
     function changeDay(days) {
@@ -2258,6 +2221,79 @@
       return countries.includes('en:united-states');
     }
 
+    function extractApiMeasureInfo(prod) {
+      const servingSizeText = String(prod.serving_size || '').trim();
+      const servingQtyNum = Number(prod.serving_quantity);
+      const categoryText = `${formatCategoryLabel(prod)} ${String(prod.categories || '')}`.toLowerCase();
+
+      let apiCupGrams = null;
+      let apiTbspGrams = null;
+      const notes = [];
+
+      if (servingSizeText) {
+        notes.push(`API serving_size: "${servingSizeText}"`);
+        const cupMatch = servingSizeText.match(/(\d+(?:\.\d+)?)\s*(?:cup|cups)\b[^0-9]*?(\d+(?:\.\d+)?)\s*g\b/i)
+          || servingSizeText.match(/(\d+(?:\.\d+)?)\s*g\b[^0-9a-zA-Z]*(\d+(?:\.\d+)?)\s*(?:cup|cups)\b/i);
+        if (cupMatch) {
+          const valA = Number(cupMatch[1]);
+          const valB = Number(cupMatch[2]);
+          if (servingSizeText.toLowerCase().indexOf('cup') < servingSizeText.toLowerCase().indexOf('g')) {
+            if (valA > 0 && valB > 0) apiCupGrams = valB / valA;
+          } else if (valA > 0 && valB > 0) {
+            apiCupGrams = valA / valB;
+          }
+        }
+
+        const tbspMatch = servingSizeText.match(/(\d+(?:\.\d+)?)\s*(?:tbsp|tablespoon|tablespoons)\b[^0-9]*?(\d+(?:\.\d+)?)\s*g\b/i)
+          || servingSizeText.match(/(\d+(?:\.\d+)?)\s*g\b[^0-9a-zA-Z]*(\d+(?:\.\d+)?)\s*(?:tbsp|tablespoon|tablespoons)\b/i);
+        if (tbspMatch) {
+          const valA = Number(tbspMatch[1]);
+          const valB = Number(tbspMatch[2]);
+          if (servingSizeText.toLowerCase().indexOf('g') < servingSizeText.toLowerCase().indexOf('tbsp') && servingSizeText.toLowerCase().indexOf('g') < servingSizeText.toLowerCase().indexOf('tablespoon')) {
+            if (valA > 0 && valB > 0) apiTbspGrams = valA / valB;
+          } else if (valA > 0 && valB > 0) {
+            apiTbspGrams = valB / valA;
+          }
+        }
+      }
+
+      if (Number.isFinite(servingQtyNum) && servingQtyNum > 0) {
+        notes.push(`API serving_quantity: ${servingQtyNum}g`);
+      }
+
+      let defaultCupGrams = 240;
+      let defaultTbspGrams = 15;
+      if (categoryText.includes('flour') || categoryText.includes('powder') || categoryText.includes('cocoa')) {
+        defaultCupGrams = 120;
+        defaultTbspGrams = 8;
+      } else if (categoryText.includes('oat') || categoryText.includes('granola') || categoryText.includes('cereal')) {
+        defaultCupGrams = 90;
+        defaultTbspGrams = 6;
+      } else if (categoryText.includes('butter') || categoryText.includes('oil') || categoryText.includes('fat')) {
+        defaultCupGrams = 227;
+        defaultTbspGrams = 14.2;
+      } else if (categoryText.includes('sugar') || categoryText.includes('honey') || categoryText.includes('syrup')) {
+        defaultCupGrams = 200;
+        defaultTbspGrams = 20;
+      } else if (categoryText.includes('milk') || categoryText.includes('beverage') || categoryText.includes('juice') || categoryText.includes('water')) {
+        defaultCupGrams = 240;
+        defaultTbspGrams = 15;
+      }
+
+      const finalCupGrams = apiCupGrams && apiCupGrams > 0 ? Math.round(apiCupGrams * 10) / 10 : defaultCupGrams;
+      const finalTbspGrams = apiTbspGrams && apiTbspGrams > 0 ? Math.round(apiTbspGrams * 10) / 10 : defaultTbspGrams;
+
+      const sourceSummary = notes.length > 0
+        ? `${notes.join(' · ')} — using ${finalCupGrams}g/cup & ${finalTbspGrams}g/tbsp (editable below).`
+        : `No cup/tbsp gram weight listed in API — using ~${finalCupGrams}g/cup & ~${finalTbspGrams}g/tbsp estimate (editable below).`;
+
+      return {
+        cupGrams: finalCupGrams,
+        tbspGrams: finalTbspGrams,
+        sourceSummary
+      };
+    }
+
     async function searchFoodDatabase() {
       const query = document.getElementById('dbSearchQuery').value.trim();
       if (!query) {
@@ -2269,7 +2305,7 @@
 
       showStatus("Searching US English food results...", "info", "dbStatus");
       try {
-        const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=50&lc=en&tagtype_0=countries&tag_contains_0=contains&tag_0=united-states&fields=product_name,product_name_en,brands,categories,categories_tags,countries_tags,lang,nutriments`;
+        const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=50&lc=en&tagtype_0=countries&tag_contains_0=contains&tag_0=united-states&fields=product_name,product_name_en,brands,categories,categories_tags,countries_tags,lang,serving_size,serving_quantity,nutriments`;
         const response = await fetch(url);
         const data = await response.json();
 
@@ -2339,27 +2375,142 @@
       const p = nut['proteins_100g'] || nut['proteins'] || 0;
       const f = nut['fat_100g'] || nut['fat'] || 0;
       const c = nut['carbohydrates_100g'] || nut['carbohydrates'] || 0;
+      const measureInfo = extractApiMeasureInfo(prod);
 
-      openPortionModal(`${name} ${brand}`.trim(), cals, p, f, c);
+      openPortionModal(`${name} ${brand}`.trim(), cals, p, f, c, measureInfo);
     }
 
     function closeDbModal() {
       document.getElementById('dbModal').style.display = 'none';
     }
 
-    function openPortionModal(name, calsPer100g, pPer100g, fPer100g, cPer100g) {
-      pendingFoodSelection = { name, calsPer100g, pPer100g, fPer100g, cPer100g };
+    function openPortionModal(name, calsPer100g, pPer100g, fPer100g, cPer100g, measureInfo = null) {
+      const info = measureInfo || {
+        cupGrams: 240,
+        tbspGrams: 15,
+        sourceSummary: 'Using ~240g/cup & ~15g/tbsp default estimate (editable below).'
+      };
+      pendingFoodSelection = {
+        name,
+        calsPer100g,
+        pPer100g,
+        fPer100g,
+        cPer100g,
+        cupGrams: info.cupGrams,
+        tbspGrams: info.tbspGrams
+      };
       document.getElementById('portionFoodTitle').innerText = `Portion for: ${name}`;
+      document.getElementById('apiUnitSourceNote').innerText = info.sourceSummary;
       document.getElementById('portionMealType').value = getDefaultMealTypeForMountainTime();
+      document.getElementById('portionUnitType').value = 'grams';
+      document.getElementById('portionUnitAmount').value = '100';
+      document.getElementById('gramsPerUnitInput').value = String(info.cupGrams);
       document.getElementById('portionGrams').value = '100';
       document.getElementById('portionMultiplier').value = '1';
-      document.getElementById('calculatedItemCals').innerText = Math.round(calsPer100g);
-      document.getElementById('calcP').innerText = Math.round(pPer100g * 10) / 10;
-      document.getElementById('calcF').innerText = Math.round(fPer100g * 10) / 10;
-      document.getElementById('calcC').innerText = Math.round(cPer100g * 10) / 10;
-      
+      handlePortionUnitChange(false);
+      updatePortionCalculations(1);
+
       closeDbModal();
       document.getElementById('portionModal').style.display = 'block';
+    }
+
+    function handlePortionUnitChange(recalc = true) {
+      if (!pendingFoodSelection) return;
+      const unitType = document.getElementById('portionUnitType').value;
+      const amountLabel = document.getElementById('portionUnitAmountLabel');
+      const amountInput = document.getElementById('portionUnitAmount');
+      const gramsPerUnitRow = document.getElementById('gramsPerUnitRow');
+      const gramsPerUnitLabel = document.getElementById('gramsPerUnitLabel');
+      const gramsPerUnitInput = document.getElementById('gramsPerUnitInput');
+
+      if (unitType === 'grams') {
+        amountLabel.innerText = 'Amount (g):';
+        gramsPerUnitRow.style.display = 'none';
+        if (recalc) {
+          amountInput.value = document.getElementById('portionGrams').value || '100';
+        }
+      } else if (unitType === 'cups') {
+        amountLabel.innerText = 'Amount (Cups):';
+        gramsPerUnitRow.style.display = 'grid';
+        gramsPerUnitLabel.innerText = 'Grams per Cup (g):';
+        if (recalc) {
+          gramsPerUnitInput.value = String(pendingFoodSelection.cupGrams);
+          amountInput.value = '1';
+        }
+      } else if (unitType === 'tablespoons') {
+        amountLabel.innerText = 'Amount (Tablespoons):';
+        gramsPerUnitRow.style.display = 'grid';
+        gramsPerUnitLabel.innerText = 'Grams per Tbsp (g):';
+        if (recalc) {
+          gramsPerUnitInput.value = String(pendingFoodSelection.tbspGrams);
+          amountInput.value = '1';
+        }
+      } else {
+        amountLabel.innerText = 'Multiplier / Fraction:';
+        gramsPerUnitRow.style.display = 'none';
+        if (recalc) {
+          amountInput.value = document.getElementById('portionMultiplier').value || '1';
+        }
+      }
+
+      if (recalc) {
+        calculateFromSelectedUnit();
+      }
+    }
+
+    function calculateFromSelectedUnit() {
+      if (!pendingFoodSelection) return;
+      const unitType = document.getElementById('portionUnitType').value;
+      const rawAmt = document.getElementById('portionUnitAmount').value.trim();
+
+      if (unitType === 'multiplier') {
+        document.getElementById('portionMultiplier').value = rawAmt;
+        calculatePortionFromMultiplier();
+        return;
+      }
+
+      if (rawAmt !== '' && hasNonNumericCharacters(rawAmt, true)) {
+        alert(`Invalid amount ("${rawAmt}"): non-numeric characters or negative signs are not allowed. Please enter a number and try again.`);
+        document.getElementById('portionUnitAmount').value = '';
+        updatePortionCalculations(0);
+        return;
+      }
+
+      const amt = parseStrictNonNegativeNumber(rawAmt);
+      if (isNaN(amt)) {
+        updatePortionCalculations(0);
+        return;
+      }
+
+      if (unitType === 'grams') {
+        document.getElementById('portionGrams').value = String(amt);
+        calculatePortionFromGrams();
+        return;
+      }
+
+      const rawGpu = document.getElementById('gramsPerUnitInput').value.trim();
+      if (rawGpu !== '' && hasNonNumericCharacters(rawGpu, true)) {
+        alert(`Invalid grams-per-unit ("${rawGpu}"): non-numeric characters or negative signs are not allowed. Please enter a number and try again.`);
+        document.getElementById('gramsPerUnitInput').value = unitType === 'cups'
+          ? String(pendingFoodSelection.cupGrams)
+          : String(pendingFoodSelection.tbspGrams);
+        return;
+      }
+
+      const gpu = parseStrictNonNegativeNumber(rawGpu);
+      if (isNaN(gpu) || gpu <= 0 || gpu > 5000) {
+        updatePortionCalculations(0);
+        return;
+      }
+
+      if (unitType === 'cups') pendingFoodSelection.cupGrams = gpu;
+      if (unitType === 'tablespoons') pendingFoodSelection.tbspGrams = gpu;
+
+      const totalGrams = Math.round(amt * gpu * 10) / 10;
+      const multiplier = totalGrams / 100;
+      document.getElementById('portionGrams').value = String(totalGrams);
+      document.getElementById('portionMultiplier').value = multiplier.toFixed(2);
+      updatePortionCalculations(multiplier);
     }
 
     function evaluateFraction(expr) {
@@ -2396,6 +2547,9 @@
       }
       const multiplier = grams / 100;
       document.getElementById('portionMultiplier').value = multiplier.toFixed(2);
+      if (document.getElementById('portionUnitType').value === 'grams') {
+        document.getElementById('portionUnitAmount').value = String(grams);
+      }
       updatePortionCalculations(multiplier);
     }
 
@@ -2416,6 +2570,9 @@
       }
       const grams = Math.round(multiplier * 100);
       document.getElementById('portionGrams').value = grams;
+      if (document.getElementById('portionUnitType').value === 'multiplier') {
+        document.getElementById('portionUnitAmount').value = expr;
+      }
       updatePortionCalculations(multiplier);
     }
 
@@ -2449,6 +2606,15 @@
       const finalF = fCheck.value;
       const finalC = cCheck.value;
       const mealType = document.getElementById('portionMealType').value || getDefaultMealTypeForMountainTime();
+      const unitType = document.getElementById('portionUnitType').value;
+      const rawAmt = document.getElementById('portionUnitAmount').value.trim();
+
+      let displayFoodName = pendingFoodSelection.name;
+      if (unitType === 'cups' && rawAmt) {
+        displayFoodName = `${pendingFoodSelection.name} (${rawAmt} cup${Number(rawAmt) === 1 ? '' : 's'})`;
+      } else if (unitType === 'tablespoons' && rawAmt) {
+        displayFoodName = `${pendingFoodSelection.name} (${rawAmt} tbsp)`;
+      }
 
       const date = document.getElementById('date').value;
       let existing = entries.find(e => e.date === date);
@@ -2458,7 +2624,7 @@
       }
 
       if (!existing.items) existing.items = [];
-      existing.items.push({ name: pendingFoodSelection.name, meal: mealType, calories: finalCals, protein: finalP, fat: finalF, carbs: finalC });
+      existing.items.push({ name: displayFoodName, meal: mealType, calories: finalCals, protein: finalP, fat: finalF, carbs: finalC });
       existing.calories = existing.items.reduce((sum, i) => sum + i.calories, 0);
 
       sortEntries();
@@ -2537,8 +2703,9 @@
           let p = nut['proteins_100g'] || nut['proteins'] || 0;
           let f = nut['fat_100g'] || nut['fat'] || 0;
           let c = nut['carbohydrates_100g'] || nut['carbohydrates'] || 0;
+          const measureInfo = extractApiMeasureInfo(prod);
 
-          openPortionModal(name, cals, p, f, c);
+          openPortionModal(name, cals, p, f, c, measureInfo);
           showStatus("", "info", "scannerStatus");
         } else {
           showStatus("Product not found in database for barcode: " + barcode, "error", "scannerStatus");
@@ -2717,7 +2884,7 @@
       renderDailyQuote();
       renderCelebrationBanner();
       updateEditingBanner();
-      renderBackupDestinationMeta();
+      renderWeeklyBackupMeta();
       flaggedEntriesMap = detectFlaggedEntries();
       updateFlaggedDeletionsButton();
       
