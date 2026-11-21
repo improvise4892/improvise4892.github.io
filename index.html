@@ -322,7 +322,7 @@
     summary::-webkit-details-marker { display: none; }
 
     summary::after {
-      content: "＋";
+      content: "+";
       font-size: 15px;
       color: var(--muted);
       font-weight: 500;
@@ -330,7 +330,7 @@
     }
 
     details[open] > summary::after {
-      content: "－";
+      content: "−";
     }
 
     .row-grid {
@@ -457,20 +457,20 @@
   <div class="celebration-banner" id="celebrationBanner">
     <div class="celebration-header">
       <span class="celebration-badge" id="celebrationBadge">Milestone Unlocked</span>
-      <button type="button" class="celebration-cycle-btn" id="celebrationCycleBtn" style="display:none;" onclick="cycleCelebration()">Next Milestone ▶</button>
+      <button type="button" class="celebration-cycle-btn" id="celebrationCycleBtn" style="display:none;" onclick="cycleCelebration()">Next Milestone</button>
     </div>
     <div class="celebration-message" id="celebrationMessage"></div>
     <div class="celebration-sub" id="celebrationSub"></div>
   </div>
 
   <div class="top-date-bar">
-    <label for="date">📅 Active Date:</label>
+    <label for="date">Active Date:</label>
     <input type="date" id="date">
   </div>
 
   <!-- Food Logging Box -->
   <div class="card card-food">
-    <h3>🥗 Food Logger</h3>
+    <h3>Food Logger</h3>
     
     <label>Search Food Database:</label>
     <div style="display: flex; gap: 8px; align-items: center;">
@@ -479,11 +479,11 @@
     </div>
     <div id="dbStatus"></div>
 
-    <button class="secondary-btn" style="background: #6f8a7e;" onclick="startBarcodeScanner()">📷 Scan Barcode via Camera</button>
+    <button class="secondary-btn" style="background: #6f8a7e;" onclick="startBarcodeScanner()">Scan Barcode via Camera</button>
     <div id="scannerStatus"></div>
 
     <details style="margin-top: 12px; padding: 9px 12px; background: rgba(255,255,255,0.75);">
-      <summary style="font-size: 0.88rem; color: var(--muted);">✏️ Or Add Food Manually</summary>
+      <summary style="font-size: 0.88rem; color: var(--muted);">Or Add Food Manually</summary>
       <div style="margin-top: 8px;">
         <div class="row-grid">
           <div>
@@ -517,7 +517,7 @@
   
   <!-- Weight & Calories Burned Log Box -->
   <div class="card card-weight">
-    <h3>⚖️ Log Weight & Burned Calories</h3>
+    <h3>Log Weight & Burned Calories</h3>
     
     <div class="row-grid">
       <div>
@@ -535,7 +535,7 @@
 
   <!-- Collapsible Trend Analysis -->
   <details id="statsCard" style="display:none;">
-    <summary>🎯 Trend Analysis (Chained From Nov 17 Weight)</summary>
+    <summary>Trend Analysis (Chained From Nov 17 Weight)</summary>
     <div style="margin-top: 10px;">
       <p style="margin: 6px 0;"><strong>Expected Weight in 4 Weeks:</strong> <span id="proj4Weeks">--</span> lbs</p>
       <ul style="margin: 6px 0 0; padding-left: 20px; font-size: 14px; color: var(--muted);">
@@ -549,21 +549,21 @@
 
   <!-- Two Charts: Past Month & Past Year -->
   <div class="chart-container">
-    <h3 class="chart-title">📊 Past Month View</h3>
+    <h3 class="chart-title">Past Month View</h3>
     <canvas id="chartMonth"></canvas>
   </div>
 
   <div class="chart-container">
-    <h3 class="chart-title">📈 Past Year View</h3>
+    <h3 class="chart-title">Past Year View</h3>
     <canvas id="chartYear"></canvas>
   </div>
 
   <!-- Collapsible Section 1: Selected Day Food Log & Macro Pie Chart -->
   <details open>
-    <summary>🥗 Food Log & Macros for: <span id="currentDateHeader">--</span></summary>
+    <summary>Food Log & Macros for: <span id="currentDateHeader">--</span></summary>
     <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;">
-      <button class="secondary-btn" style="margin:0; width: auto; padding: 6px 12px;" onclick="changeDay(-1)">◀ Previous Day</button>
-      <button class="secondary-btn" style="margin:0; width: auto; padding: 6px 12px;" onclick="changeDay(1)">Next Day ▶</button>
+      <button class="secondary-btn" style="margin:0; width: auto; padding: 6px 12px;" onclick="changeDay(-1)">Previous Day</button>
+      <button class="secondary-btn" style="margin:0; width: auto; padding: 6px 12px;" onclick="changeDay(1)">Next Day</button>
     </div>
 
     <div style="margin-top: 14px;">
@@ -591,13 +591,13 @@
 
   <!-- Collapsible Section 2: Weight & Calorie History Log -->
   <details open>
-    <summary>📋 Weight & History Log (10 Entries Per Page)</summary>
+    <summary>Weight & History Log (10 Entries Per Page)</summary>
     <div style="margin-top: 10px;">
       <div class="history-pager">
         <span class="history-range-label" id="historyRangeLabel">No entries yet</span>
         <div class="history-pager-buttons">
-          <button type="button" class="secondary-btn" id="newerHistoryBtn" onclick="changeHistoryPage(-1)">◀ Newer 10</button>
-          <button type="button" class="secondary-btn" id="olderHistoryBtn" onclick="changeHistoryPage(1)">Older 10 ▶</button>
+          <button type="button" class="secondary-btn" id="newerHistoryBtn" onclick="changeHistoryPage(-1)">Newer 10</button>
+          <button type="button" class="secondary-btn" id="olderHistoryBtn" onclick="changeHistoryPage(1)">Older 10</button>
         </div>
       </div>
       <table>
@@ -619,7 +619,7 @@
 
   <!-- Collapsible CSV Import Box (Bottom of Page) -->
   <details>
-    <summary>📂 Import CSV File (Renpho / Garmin)</summary>
+    <summary>Import CSV File (Renpho / Garmin)</summary>
     <div style="margin-top: 10px;">
       <label>Select Data Type:</label>
       <select id="importType">
@@ -975,7 +975,7 @@
 
       if (activeCelebrations.length > 1) {
         cycleBtn.style.display = 'inline-block';
-        cycleBtn.innerText = `Milestone ${celebrationIndex + 1}/${activeCelebrations.length} ▶`;
+        cycleBtn.innerText = `Milestone ${celebrationIndex + 1}/${activeCelebrations.length}`;
       } else {
         cycleBtn.style.display = 'none';
       }
