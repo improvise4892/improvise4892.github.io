@@ -307,10 +307,10 @@
   </style>
 </head>
 <body>
-  <!-- Daily Inspirational Quote Banner -->
+  <!-- Daily Motivational Phrase Banner -->
   <div class="quote-banner" id="dailyQuoteBanner">
-    <span id="dailyQuoteText">Small daily choices compound into lasting change.</span>
-    <span class="quote-author" id="dailyQuoteAuthor">— Daily Motivation</span>
+    <span id="dailyQuoteText">I'm proud of you for showing up and checking in today.</span>
+    <span class="quote-author" id="dailyQuoteAuthor">— Daily Check-In</span>
   </div>
 
   <h2>Weight & Calorie Tracker</h2>
@@ -556,26 +556,6 @@
 
   <script>
     const START_WEIGHT_DATE = '2026-11-17';
-    const MOTIVATIONAL_QUOTES = [
-      { text: "Take care of your body. It's the only place you have to live.", author: "Jim Rohn" },
-      { text: "Success is the sum of small efforts, repeated day in and day out.", author: "Robert Collier" },
-      { text: "You don't have to be extreme, just consistent.", author: "Unknown" },
-      { text: "Discipline is choosing between what you want now and what you want most.", author: "Abraham Lincoln" },
-      { text: "A one-hour workout is 4% of your day. No excuses.", author: "Unknown" },
-      { text: "The only bad workout is the one that didn't happen.", author: "Unknown" },
-      { text: "Fall in love with the process, and the results will come.", author: "Unknown" },
-      { text: "Your body can stand almost anything. It's your mind that you have to convince.", author: "Unknown" },
-      { text: "Don't stop when you're tired. Stop when you're done.", author: "David Goggins" },
-      { text: "Progress, not perfection, is what we should be asking of ourselves.", author: "Julia Cameron" },
-      { text: "Action is the foundational key to all success.", author: "Pablo Picasso" },
-      { text: "Strength does not come from physical capacity. It comes from an indomitable will.", author: "Mahatma Gandhi" },
-      { text: "Healthy habits are built one honest meal and one steady choice at a time.", author: "Unknown" },
-      { text: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", author: "Will Durant" },
-      { text: "Every step forward is a victory over yesterday's hesitation.", author: "Unknown" },
-      { text: "Invest in your health today so your future self can thank you.", author: "Unknown" },
-      { text: "Consistency turns average effort into extraordinary results.", author: "Unknown" },
-      { text: "Focus on what you can control today—the trend will follow.", author: "Unknown" }
-    ];
 
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
     let chartMonth, chartYear, macroPieChart = null;
@@ -592,15 +572,114 @@
       return `${y}-${m}-${d}`;
     }
 
-    function renderDailyQuote() {
-      const dateKey = getLocalDateKey();
+    function getDailySeedIndex(dateKey, length) {
+      if (length <= 0) return 0;
       let hash = 0;
       for (let i = 0; i < dateKey.length; i++) {
         hash = (hash * 31 + dateKey.charCodeAt(i)) >>> 0;
       }
-      const quote = MOTIVATIONAL_QUOTES[hash % MOTIVATIONAL_QUOTES.length];
-      document.getElementById('dailyQuoteText').innerText = `"${quote.text}"`;
-      document.getElementById('dailyQuoteAuthor').innerText = `— ${quote.author}`;
+      return hash % length;
+    }
+
+    function computeLastWeekMetrics() {
+      const todayKey = getLocalDateKey();
+      const todayDate = new Date(todayKey + 'T00:00:00');
+      const sevenDaysAgo = new Date(todayDate);
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+
+      const weekEntries = entries.filter(e => {
+        if (!e.date) return false;
+        const d = new Date(e.date + 'T00:00:00');
+        return d >= sevenDaysAgo && d <= todayDate;
+      });
+
+      let netCals = 0;
+      weekEntries.forEach(e => {
+        const consumed = e.calories || 0;
+        const burned = e.caloriesBurned || 2000;
+        netCals += (consumed - burned);
+      });
+
+      const projectedLbs = netCals / 3500;
+      const loggedToday = entries.some(e =>
+        e.date === todayKey &&
+        ((e.items && e.items.length > 0) || e.weight !== null || (e.caloriesBurned && e.caloriesBurned !== 2000))
+      );
+
+      return {
+        dayCount: weekEntries.length,
+        projectedLbs,
+        loggedToday
+      };
+    }
+
+    function buildContextualPhrases(metrics) {
+      const { dayCount, projectedLbs, loggedToday } = metrics;
+      const lossAbs = Math.abs(projectedLbs).toFixed(2);
+      const gainAbs = Math.abs(projectedLbs).toFixed(2);
+
+      const lossPhrases = [
+        `With the data from this last week, you're on track for a projected change of -${lossAbs} lbs—keep that steady momentum going.`,
+        `Your last 7 days point to a projected -${lossAbs} lbs shift. Consistency beats perfection every single time.`,
+        `-${lossAbs} lbs projected over the last week's data shows your habits are adding up—trust the trend.`,
+        `A projected -${lossAbs} lbs over the past week is real proof that your daily choices matter.`
+      ];
+
+      const surplusPhrases = [
+        `Keep going. Sometimes we need a break to regain the strength to continue improving ourselves.`,
+        `Your last week's numbers lean slightly on the higher side (+${gainAbs} lbs projected)—give yourself grace and reset with your next meal.`,
+        `A heavier calorie week happens to everyone. One balanced day can turn the week right back around.`,
+        `You haven't lost your progress—zoom out, take a breath, and focus on the very next choice.`
+      ];
+
+      const steadyPhrases = [
+        `Your last week's calorie balance is holding right near even—steady footing is great preparation for your next push.`,
+        `Balanced days over the past week keep things steady. Small, sustainable adjustments go a long way.`
+      ];
+
+      const loggingPhrases = loggedToday
+        ? [
+            `I'm proud of you for logging today—showing up on the tracker keeps your awareness sharp.`,
+            `Logging today is a win in itself. Every data point helps you steer with confidence.`
+          ]
+        : [
+            `Even a quick log today keeps your streak of self-awareness moving forward.`,
+            `Checking in today takes just a minute and gives you clarity for the rest of the day.`
+          ];
+
+      if (dayCount === 0) {
+        return [
+          `I'm proud of you for opening your tracker today—logging even one meal or weight gets the ball rolling.`,
+          `Every fresh start begins with one small step. Log your first entry whenever you're ready.`,
+          ...loggingPhrases
+        ];
+      }
+
+      if (projectedLbs <= -0.05) {
+        return [...lossPhrases, ...loggingPhrases];
+      }
+
+      if (projectedLbs >= 0.05) {
+        return [...surplusPhrases, ...loggingPhrases];
+      }
+
+      return [...steadyPhrases, ...loggingPhrases];
+    }
+
+    function renderDailyQuote() {
+      const dateKey = getLocalDateKey();
+      const metrics = computeLastWeekMetrics();
+      const pool = buildContextualPhrases(metrics);
+      const chosen = pool[getDailySeedIndex(dateKey, pool.length)];
+
+      let tag = "Daily Check-In";
+      if (metrics.dayCount > 0) {
+        const sign = metrics.projectedLbs >= 0 ? "+" : "";
+        tag = `7-Day Trend: ${sign}${metrics.projectedLbs.toFixed(2)} lbs (${metrics.dayCount}d logged)`;
+      }
+
+      document.getElementById('dailyQuoteText').innerText = `"${chosen}"`;
+      document.getElementById('dailyQuoteAuthor').innerText = `— ${tag}`;
     }
 
     function sortEntries() {
@@ -717,7 +796,6 @@
     }
 
     function init() {
-      renderDailyQuote();
       const todayStr = getLocalDateKey();
       document.getElementById('date').value = todayStr;
       initCharts();
@@ -1219,6 +1297,7 @@
 
     function renderAll() {
       sortEntries();
+      renderDailyQuote();
       
       let historyTableHtml = '';
       let todayFoodTableHtml = '';
