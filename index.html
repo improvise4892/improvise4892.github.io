@@ -410,13 +410,24 @@
     }
     button.danger-outline:hover { background: #fdf2f2; }
 
-    #importStatus, #scannerStatus, #dbStatus {
+    #importStatus, #scannerStatus, #dbStatus, #backupStatus {
       font-size: 13px;
       margin-top: 8px;
       font-weight: 600;
       padding: 7px 10px;
       border-radius: 7px;
       display: none;
+    }
+
+    .storage-note {
+      font-size: 12px;
+      color: var(--muted);
+      background: #f4f7f5;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      line-height: 1.45;
     }
 
     #scannerModal, #dbModal, #portionModal, #flaggedDeletionsModal {
@@ -540,12 +551,12 @@
         </div>
 
         <label>Calories:</label>
-        <input type="number" id="manualFoodCals" placeholder="e.g., 150">
+        <input type="text" inputmode="decimal" id="manualFoodCals" placeholder="e.g., 150">
 
         <div class="row-grid" style="grid-template-columns: repeat(3, 1fr);">
-          <div><label>Protein (g):</label><input type="number" id="manualProtein" step="0.1" value="0"></div>
-          <div><label>Fat (g):</label><input type="number" id="manualFat" step="0.1" value="0"></div>
-          <div><label>Carbs (g):</label><input type="number" id="manualCarbs" step="0.1" value="0"></div>
+          <div><label>Protein (g):</label><input type="text" inputmode="decimal" id="manualProtein" value="0"></div>
+          <div><label>Fat (g):</label><input type="text" inputmode="decimal" id="manualFat" value="0"></div>
+          <div><label>Carbs (g):</label><input type="text" inputmode="decimal" id="manualCarbs" value="0"></div>
         </div>
 
         <button class="primary-btn" style="margin-top: 6px;" onclick="addManualFoodItem()">Add Food Item to Log</button>
@@ -564,11 +575,11 @@
     <div class="row-grid">
       <div>
         <label>Weight (lbs) [Optional]:</label>
-        <input type="number" step="0.1" id="weight" placeholder="e.g., 150">
+        <input type="text" inputmode="decimal" id="weight" placeholder="e.g., 150">
       </div>
       <div>
         <label>Calories Burned (Optional):</label>
-        <input type="number" id="caloriesBurned" placeholder="Default: 2000">
+        <input type="text" inputmode="numeric" id="caloriesBurned" placeholder="Default: 2000">
       </div>
     </div>
 
@@ -659,11 +670,38 @@
     </div>
   </details>
 
-  <!-- Collapsible CSV Import Box (Bottom of Page) -->
-  <details>
-    <summary>Import CSV File (Renpho / Garmin)</summary>
+  <!-- Collapsible Backup, Restore & CSV Import Box -->
+  <details open>
+    <summary>Backup, Restore & CSV Import (Browser Storage)</summary>
     <div style="margin-top: 10px;">
-      <label>Select Data Type:</label>
+      <div class="storage-note">
+        <strong>Where your data lives:</strong> Stored locally in this browser (<code>localStorage</code> under <code>weightData</code>). Choose whether you want CSV backups saved locally or prepared for <strong>Google Drive</strong> under your files.
+      </div>
+
+      <label for="backupDestinationSelect">Where Should CSV Backups Be Stored?</label>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <select id="backupDestinationSelect" style="margin: 4px 0;" onchange="saveBackupDestinationSetting()">
+          <option value="google_drive">Google Drive (Save under my files)</option>
+          <option value="local_download">Download Locally to Device</option>
+        </select>
+        <button type="button" class="secondary-btn" style="width: 150px; margin: 4px 0; flex-shrink: 0;" onclick="promptAndExportCsvDestination()">Export CSV Now</button>
+      </div>
+      <div style="font-size: 12px; color: var(--muted); margin-bottom: 6px;" id="backupDestinationMeta">Destination: <b>Google Drive (Save under my files)</b></div>
+
+      <div class="row-grid">
+        <button type="button" class="primary-btn" onclick="downloadBackupJson()">Download Backup (JSON)</button>
+        <button type="button" class="secondary-btn" onclick="downloadBackupCsv()">Download Backup (CSV)</button>
+      </div>
+
+      <label for="restoreBackupFile">Restore From JSON or CSV Backup:</label>
+      <input type="file" id="restoreBackupFile" accept=".json,.csv,application/json,text/csv">
+      <button type="button" class="primary-btn" onclick="restoreBackupFile()">Restore Backup File</button>
+
+      <div id="backupStatus"></div>
+
+      <hr style="border: none; border-top: 1px solid var(--border); margin: 14px 0;">
+
+      <label>Import Data Type:</label>
       <select id="importType">
         <option value="renpho">Renpho Weight CSV</option>
         <option value="garmin">Garmin Calories CSV</option>
@@ -725,7 +763,7 @@
       </select>
       
       <label>Amount in Grams (e.g. 150):</label>
-      <input type="number" id="portionGrams" placeholder="e.g. 150" oninput="calculatePortionFromGrams()">
+      <input type="text" inputmode="decimal" id="portionGrams" placeholder="e.g. 150" oninput="calculatePortionFromGrams()">
 
       <label>OR Fraction / Multiplier (e.g. 0.5 or 1/2):</label>
       <input type="text" id="portionMultiplier" value="1" placeholder="e.g. 0.5" oninput="calculatePortionFromMultiplier()">
@@ -772,12 +810,12 @@
       </div>
 
       <label>Calories:</label>
-      <input type="number" id="editFoodCals">
+      <input type="text" inputmode="decimal" id="editFoodCals">
 
       <div class="row-grid" style="grid-template-columns: repeat(3, 1fr);">
-        <div><label>Protein (g):</label><input type="number" id="editProtein" step="0.1"></div>
-        <div><label>Fat (g):</label><input type="number" id="editFat" step="0.1"></div>
-        <div><label>Carbs (g):</label><input type="number" id="editCarbs" step="0.1"></div>
+        <div><label>Protein (g):</label><input type="text" inputmode="decimal" id="editProtein"></div>
+        <div><label>Fat (g):</label><input type="text" inputmode="decimal" id="editFat"></div>
+        <div><label>Carbs (g):</label><input type="text" inputmode="decimal" id="editCarbs"></div>
       </div>
 
       <button class="primary-btn" onclick="saveEditedFoodItem()" style="margin-top: 10px;">Save Changes</button>
@@ -788,6 +826,7 @@
   <script>
     const START_WEIGHT_DATE = '2026-11-17';
     const HISTORY_PAGE_SIZE = 10;
+    const BACKUP_DESTINATION_KEY = 'trackerBackupDestination';
 
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
     let chartMonth, chartYear, macroPieChart = null;
@@ -800,6 +839,363 @@
     let historyPageOffset = 0;
     let editingEntryOriginalDate = null;
     let flaggedEntriesMap = new Map();
+
+    function hasNonNumericCharacters(rawValue, allowDecimal = true) {
+      const str = String(rawValue ?? '').trim();
+      if (str === '') return false;
+      const pattern = allowDecimal ? /^\d+(\.\d+)?$/ : /^\d+$/;
+      return !pattern.test(str);
+    }
+
+    function parseStrictNonNegativeNumber(rawValue) {
+      if (rawValue === null || rawValue === undefined) return NaN;
+      const str = String(rawValue).trim();
+      if (str === '') return NaN;
+      if (!/^\d+(\.\d+)?$/.test(str)) return NaN;
+      const num = Number(str);
+      return Number.isFinite(num) && num >= 0 ? num : NaN;
+    }
+
+    function validateWeightInput(rawValue, required = false) {
+      const str = String(rawValue ?? '').trim();
+      if (str === '') {
+        return required
+          ? { ok: false, error: 'Invalid weight: please enter a positive number and try again.' }
+          : { ok: true, value: null };
+      }
+      if (hasNonNumericCharacters(str, true)) {
+        return { ok: false, error: `Invalid weight ("${str}"): non-numeric characters or negative signs are not allowed. Please enter a number and try again.` };
+      }
+      const num = parseStrictNonNegativeNumber(str);
+      if (isNaN(num) || num <= 0) {
+        return { ok: false, error: `Invalid weight ("${str}"): weight must be greater than 0 lbs. Please try again.` };
+      }
+      if (num > 700) {
+        return { ok: false, error: `Invalid weight ("${str}"): weight must be 700 lbs or less. Please try again.` };
+      }
+      return { ok: true, value: Math.round(num * 10) / 10 };
+    }
+
+    function validateCaloriesBurnedInput(rawValue, allowEmptyDefault = true) {
+      const str = String(rawValue ?? '').trim();
+      if (str === '') {
+        if (allowEmptyDefault) return { ok: true, value: 2000 };
+        return { ok: false, error: 'Invalid calories burned: please enter a non-negative number and try again.' };
+      }
+      if (hasNonNumericCharacters(str, true)) {
+        return { ok: false, error: `Invalid calories burned ("${str}"): non-numeric characters or negative signs are not allowed. Please enter a number and try again.` };
+      }
+      const num = parseStrictNonNegativeNumber(str);
+      if (isNaN(num)) {
+        return { ok: false, error: `Invalid calories burned ("${str}"): please enter a non-negative number and try again.` };
+      }
+      if (num > 15000) {
+        return { ok: false, error: `Invalid calories burned ("${str}"): calories burned must be 15,000 or less. Please try again.` };
+      }
+      return { ok: true, value: Math.round(num) };
+    }
+
+    function validateFoodCaloriesInput(rawValue) {
+      const str = String(rawValue ?? '').trim();
+      if (hasNonNumericCharacters(str, true)) {
+        return { ok: false, error: `Invalid calories ("${str}"): non-numeric characters or negative signs are not allowed. Please enter a number and try again.` };
+      }
+      const num = parseStrictNonNegativeNumber(str);
+      if (isNaN(num)) {
+        return { ok: false, error: `Invalid calories ("${str}"): please enter a non-negative calorie number and try again.` };
+      }
+      if (num > 20000) {
+        return { ok: false, error: `Invalid calories ("${str}"): food calories must be 20,000 or less. Please try again.` };
+      }
+      return { ok: true, value: Math.round(num * 10) / 10 };
+    }
+
+    function validateMacroInput(rawValue, label) {
+      const str = String(rawValue ?? '').trim();
+      if (hasNonNumericCharacters(str, true)) {
+        return { ok: false, error: `Invalid ${label} ("${str}"): non-numeric characters or negative signs are not allowed. Please enter a number and try again.` };
+      }
+      const num = parseStrictNonNegativeNumber(str);
+      if (isNaN(num)) {
+        return { ok: false, error: `Invalid ${label} ("${str}"): please enter a non-negative number and try again.` };
+      }
+      if (num > 2000) {
+        return { ok: false, error: `Invalid ${label} ("${str}"): ${label} must be 2,000g or less. Please try again.` };
+      }
+      return { ok: true, value: Math.round(num * 10) / 10 };
+    }
+
+    function attachNumericInputAlertListeners() {
+      const guardedFields = [
+        { id: 'weight', label: 'Weight' },
+        { id: 'caloriesBurned', label: 'Calories Burned' },
+        { id: 'manualFoodCals', label: 'Calories' },
+        { id: 'manualProtein', label: 'Protein' },
+        { id: 'manualFat', label: 'Fat' },
+        { id: 'manualCarbs', label: 'Carbs' },
+        { id: 'portionGrams', label: 'Portion Grams' },
+        { id: 'editFoodCals', label: 'Calories' },
+        { id: 'editProtein', label: 'Protein' },
+        { id: 'editFat', label: 'Fat' },
+        { id: 'editCarbs', label: 'Carbs' }
+      ];
+
+      guardedFields.forEach(({ id, label }) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('change', () => {
+          const val = el.value.trim();
+          if (val !== '' && hasNonNumericCharacters(val, true)) {
+            alert(`Invalid ${label} entry ("${val}"): non-numeric characters or negative signs are not allowed. Please try again.`);
+            el.value = '';
+            el.focus();
+          }
+        });
+      });
+    }
+
+    function getBackupDestination() {
+      return localStorage.getItem(BACKUP_DESTINATION_KEY) || 'google_drive';
+    }
+
+    function saveBackupDestinationSetting() {
+      const selectEl = document.getElementById('backupDestinationSelect');
+      if (!selectEl) return;
+      const dest = selectEl.value;
+      localStorage.setItem(BACKUP_DESTINATION_KEY, dest);
+      renderBackupDestinationMeta();
+      const label = dest === 'google_drive' ? 'Google Drive (Save under my files)' : 'Download Locally to Device';
+      showStatus(`Backup destination set to: ${label}`, 'info', 'backupStatus');
+    }
+
+    function renderBackupDestinationMeta() {
+      const dest = getBackupDestination();
+      const metaEl = document.getElementById('backupDestinationMeta');
+      const selectEl = document.getElementById('backupDestinationSelect');
+      if (selectEl) selectEl.value = dest;
+      if (metaEl) {
+        const text = dest === 'google_drive'
+          ? 'Google Drive (Save under my files)'
+          : 'Download Locally to Device';
+        metaEl.innerHTML = `CSV Backup Destination: <b>${text}</b>`;
+      }
+    }
+
+    function promptAndExportCsvDestination() {
+      const currentDest = getBackupDestination();
+      const choice = prompt(
+        'Where would you like your CSV backup stored?\nType "drive" for Google Drive (save under my files) or "local" to download locally:',
+        currentDest === 'local_download' ? 'local' : 'drive'
+      );
+
+      if (choice === null) return;
+      const normalized = choice.trim().toLowerCase();
+      let selectedDest = currentDest;
+      if (normalized.startsWith('drive') || normalized.includes('google')) {
+        selectedDest = 'google_drive';
+      } else if (normalized.startsWith('local') || normalized.startsWith('down')) {
+        selectedDest = 'local_download';
+      } else {
+        alert('Please enter "drive" for Google Drive or "local" for a local download, and try again.');
+        return;
+      }
+
+      localStorage.setItem(BACKUP_DESTINATION_KEY, selectedDest);
+      renderBackupDestinationMeta();
+      exportCsvToChosenDestination(selectedDest);
+    }
+
+    function exportCsvToChosenDestination(dest = null) {
+      const targetDest = dest || getBackupDestination();
+      const csv = buildFullBackupCsv();
+      const filename = `weight-calorie-backup-${getLocalDateKey()}.csv`;
+
+      if (targetDest === 'google_drive') {
+        triggerFileDownload(filename, csv, 'text/csv;charset=utf-8;');
+        showStatus(
+          `CSV prepared (${filename}) for Google Drive ("My Drive" / your files). Download started—you can also ask me to save a copy directly into your Google Drive files.`,
+          'success',
+          'backupStatus'
+        );
+      } else {
+        triggerFileDownload(filename, csv, 'text/csv;charset=utf-8;');
+        showStatus(`CSV backup downloaded locally to your device (${filename}).`, 'success', 'backupStatus');
+      }
+    }
+
+    function buildFullBackupCsv() {
+      const headers = [
+        'date',
+        'weight_lbs',
+        'calories_consumed',
+        'calories_burned',
+        'food_items_json'
+      ];
+      const lines = [headers.join(',')];
+
+      entries.forEach((entry) => {
+        const safeDate = String(entry.date || '');
+        const safeWeight = entry.weight !== null && entry.weight !== undefined ? String(entry.weight) : '';
+        const safeConsumed = String(entry.calories ?? 0);
+        const safeBurned = String(entry.caloriesBurned ?? 2000);
+        const itemsJson = JSON.stringify(Array.isArray(entry.items) ? entry.items : []);
+        const escapedItems = `"${itemsJson.replace(/"/g, '""')}"`;
+        lines.push([safeDate, safeWeight, safeConsumed, safeBurned, escapedItems].join(','));
+      });
+
+      return lines.join('\n');
+    }
+
+    function triggerFileDownload(filename, content, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function downloadBackupJson() {
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        storageKey: 'weightData',
+        entries
+      };
+      triggerFileDownload(
+        `weight-calorie-backup-${getLocalDateKey()}.json`,
+        JSON.stringify(payload, null, 2),
+        'application/json'
+      );
+      showStatus('JSON backup downloaded from browser storage.', 'success', 'backupStatus');
+    }
+
+    function downloadBackupCsv() {
+      exportCsvToChosenDestination(getBackupDestination());
+    }
+
+    function restoreBackupFile() {
+      const fileInput = document.getElementById('restoreBackupFile');
+      const file = fileInput && fileInput.files[0];
+      if (!file) {
+        showStatus('Please choose a JSON or CSV backup file to restore.', 'error', 'backupStatus');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const text = String(e.target.result || '').trim();
+          if (!text) {
+            showStatus('Backup file is empty.', 'error', 'backupStatus');
+            return;
+          }
+
+          let restoredEntries = [];
+          if (text.startsWith('{') || text.startsWith('[')) {
+            const parsed = JSON.parse(text);
+            const rawList = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.entries) ? parsed.entries : []);
+            restoredEntries = rawList
+              .map((row) => {
+                const dateKey = parseDateOnly(row.date || '');
+                if (!dateKey) return null;
+                const wCheck = validateWeightInput(row.weight, false);
+                const bCheck = validateCaloriesBurnedInput(row.caloriesBurned, true);
+                const items = Array.isArray(row.items)
+                  ? row.items
+                      .filter((it) => it && typeof it.name === 'string' && it.name.trim())
+                      .map((it) => ({
+                        name: it.name.trim(),
+                        meal: it.meal || 'Snack',
+                        calories: parseStrictNonNegativeNumber(it.calories) || 0,
+                        protein: parseStrictNonNegativeNumber(it.protein) || 0,
+                        fat: parseStrictNonNegativeNumber(it.fat) || 0,
+                        carbs: parseStrictNonNegativeNumber(it.carbs) || 0
+                      }))
+                  : [];
+                const consumed = items.length > 0
+                  ? items.reduce((s, x) => s + x.calories, 0)
+                  : (parseStrictNonNegativeNumber(row.calories) || 0);
+                return {
+                  date: dateKey,
+                  weight: wCheck.ok ? wCheck.value : null,
+                  calories: consumed,
+                  caloriesBurned: bCheck.ok ? bCheck.value : 2000,
+                  items
+                };
+              })
+              .filter(Boolean);
+          } else {
+            const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
+            if (lines.length < 2) {
+              showStatus('CSV backup has no data rows.', 'error', 'backupStatus');
+              return;
+            }
+            const delimiter = lines[0].includes('\t') ? '\t' : (lines[0].includes(';') ? ';' : ',');
+            const headers = splitCSVLine(lines[0], delimiter).map((h) => h.toLowerCase().replace(/^\ufeff/, '').trim());
+            const dateIdx = Math.max(0, headers.findIndex((h) => h.includes('date')));
+            const weightIdx = headers.findIndex((h) => h.includes('weight'));
+            const consumedIdx = headers.findIndex((h) => h.includes('consumed') || h === 'calories');
+            const burnedIdx = headers.findIndex((h) => h.includes('burned'));
+            const itemsIdx = headers.findIndex((h) => h.includes('items'));
+
+            for (let i = 1; i < lines.length; i++) {
+              const cols = splitCSVLine(lines[i], delimiter);
+              const dateKey = parseDateOnly(cols[dateIdx] || '');
+              if (!dateKey) continue;
+              const wRaw = weightIdx >= 0 ? cols[weightIdx] : '';
+              const wCheck = validateWeightInput(wRaw, false);
+              const bRaw = burnedIdx >= 0 ? cols[burnedIdx] : '';
+              const bCheck = validateCaloriesBurnedInput(bRaw, true);
+
+              let items = [];
+              if (itemsIdx >= 0 && cols[itemsIdx]) {
+                try {
+                  const parsedItems = JSON.parse(cols[itemsIdx]);
+                  if (Array.isArray(parsedItems)) {
+                    items = parsedItems.map((it) => ({
+                      name: String(it.name || '').trim() || 'Item',
+                      meal: String(it.meal || 'Snack'),
+                      calories: parseStrictNonNegativeNumber(it.calories) || 0,
+                      protein: parseStrictNonNegativeNumber(it.protein) || 0,
+                      fat: parseStrictNonNegativeNumber(it.fat) || 0,
+                      carbs: parseStrictNonNegativeNumber(it.carbs) || 0
+                    }));
+                  }
+                } catch (_) {}
+              }
+
+              const cVal = consumedIdx >= 0 ? (parseStrictNonNegativeNumber(cols[consumedIdx]) || 0) : 0;
+              restoredEntries.push({
+                date: dateKey,
+                weight: wCheck.ok ? wCheck.value : null,
+                calories: items.length > 0 ? items.reduce((s, x) => s + x.calories, 0) : cVal,
+                caloriesBurned: bCheck.ok ? bCheck.value : 2000,
+                items
+              });
+            }
+          }
+
+          if (restoredEntries.length === 0) {
+            showStatus('No valid entries found in backup file.', 'error', 'backupStatus');
+            return;
+          }
+
+          entries = restoredEntries;
+          historyPageOffset = 0;
+          sortEntries();
+          localStorage.setItem('weightData', JSON.stringify(entries));
+          renderAll();
+          fileInput.value = '';
+          showStatus(`Restored ${entries.length} entries into browser storage.`, 'success', 'backupStatus');
+        } catch (err) {
+          showStatus('Restore failed: ' + err.message, 'error', 'backupStatus');
+        }
+      };
+      reader.readAsText(file);
+    }
 
     function getLocalDateKey() {
       const now = new Date();
@@ -1114,7 +1510,7 @@
       });
 
       let prevWeight = null;
-      entries.forEach((entry, idx) => {
+      entries.forEach((entry) => {
         const reasons = [];
         if (entry.date && (dateCounts.get(entry.date) || 0) > 1) {
           reasons.push('Duplicate date');
@@ -1226,6 +1622,7 @@
 
     function showStatus(message, type = 'info', elementId = 'importStatus') {
       const statusEl = document.getElementById(elementId);
+      if (!statusEl) return;
       if (!message) {
         statusEl.style.display = 'none';
         statusEl.innerText = '';
@@ -1382,6 +1779,7 @@
     function init() {
       const todayStr = getLocalDateKey();
       document.getElementById('date').value = todayStr;
+      attachNumericInputAlertListeners();
       applyDefaultMealTypeSelectors();
       initCharts();
       renderAll();
@@ -1400,15 +1798,36 @@
       const date = document.getElementById('date').value;
       const name = document.getElementById('manualFoodName').value.trim();
       const meal = document.getElementById('manualMealType').value;
-      const calories = parseFloat(document.getElementById('manualFoodCals').value);
-      const protein = parseFloat(document.getElementById('manualProtein').value) || 0;
-      const fat = parseFloat(document.getElementById('manualFat').value) || 0;
-      const carbs = parseFloat(document.getElementById('manualCarbs').value) || 0;
+      const calCheck = validateFoodCaloriesInput(document.getElementById('manualFoodCals').value);
+      const pCheck = validateMacroInput(document.getElementById('manualProtein').value, 'Protein');
+      const fCheck = validateMacroInput(document.getElementById('manualFat').value, 'Fat');
+      const cCheck = validateMacroInput(document.getElementById('manualCarbs').value, 'Carbs');
 
-      if (!date || !name || isNaN(calories)) {
-        alert("Please select a date, food name, and calorie amount.");
+      if (!date || !name) {
+        alert("Please select a date and enter a food name, then try again.");
         return;
       }
+      if (!calCheck.ok) {
+        alert(calCheck.error);
+        return;
+      }
+      if (!pCheck.ok) {
+        alert(pCheck.error);
+        return;
+      }
+      if (!fCheck.ok) {
+        alert(fCheck.error);
+        return;
+      }
+      if (!cCheck.ok) {
+        alert(cCheck.error);
+        return;
+      }
+
+      const calories = calCheck.value;
+      const protein = pCheck.value;
+      const fat = fCheck.value;
+      const carbs = cCheck.value;
 
       let existing = entries.find(e => e.date === date);
       if (!existing) {
@@ -1461,7 +1880,19 @@
       const burnedVal = document.getElementById('caloriesBurned').value;
 
       if (!date) {
-        alert("Please select a date.");
+        alert("Please select a date and try again.");
+        return;
+      }
+
+      const wCheck = validateWeightInput(weightVal, false);
+      if (!wCheck.ok) {
+        alert(wCheck.error);
+        return;
+      }
+
+      const bCheck = validateCaloriesBurnedInput(burnedVal, true);
+      if (!bCheck.ok) {
+        alert(bCheck.error);
         return;
       }
 
@@ -1492,16 +1923,16 @@
         if (targetEntry.weight === null && origEntry.weight !== null) {
           targetEntry.weight = origEntry.weight;
         }
-        if (burnedVal === "" && origEntry.caloriesBurned) {
+        if (String(burnedVal).trim() === "" && origEntry.caloriesBurned) {
           targetEntry.caloriesBurned = origEntry.caloriesBurned;
         }
       }
 
-      if (weightVal !== "") {
-        targetEntry.weight = parseFloat(weightVal);
+      if (wCheck.value !== null) {
+        targetEntry.weight = wCheck.value;
       }
-      if (burnedVal !== "" && parseFloat(burnedVal) !== 0) {
-        targetEntry.caloriesBurned = parseFloat(burnedVal);
+      if (String(burnedVal).trim() !== "") {
+        targetEntry.caloriesBurned = bCheck.value;
       }
 
       if (origEntry && origEntry !== targetEntry) {
@@ -1632,10 +2063,10 @@
 
       const name = document.getElementById('editFoodName').value.trim();
       const meal = document.getElementById('editMealType').value;
-      const calories = parseFloat(document.getElementById('editFoodCals').value) || 0;
-      const protein = parseFloat(document.getElementById('editProtein').value) || 0;
-      const fat = parseFloat(document.getElementById('editFat').value) || 0;
-      const carbs = parseFloat(document.getElementById('editCarbs').value) || 0;
+      const calCheck = validateFoodCaloriesInput(document.getElementById('editFoodCals').value);
+      const pCheck = validateMacroInput(document.getElementById('editProtein').value, 'Protein');
+      const fCheck = validateMacroInput(document.getElementById('editFat').value, 'Fat');
+      const cCheck = validateMacroInput(document.getElementById('editCarbs').value, 'Carbs');
 
       const dateSelectVal = document.getElementById('editFoodDate').value;
       const targetDate = dateSelectVal === '__custom__'
@@ -1643,16 +2074,39 @@
         : dateSelectVal;
 
       if (!name) {
-        alert("Food name cannot be empty.");
+        alert("Food name cannot be empty. Please enter a name and try again.");
+        return;
+      }
+      if (!calCheck.ok) {
+        alert(calCheck.error);
+        return;
+      }
+      if (!pCheck.ok) {
+        alert(pCheck.error);
+        return;
+      }
+      if (!fCheck.ok) {
+        alert(fCheck.error);
+        return;
+      }
+      if (!cCheck.ok) {
+        alert(cCheck.error);
         return;
       }
 
       if (!targetDate) {
-        alert("Please select a valid date.");
+        alert("Please select a valid date and try again.");
         return;
       }
 
-      const updatedItem = { name, meal, calories, protein, fat, carbs };
+      const updatedItem = {
+        name,
+        meal,
+        calories: calCheck.value,
+        protein: pCheck.value,
+        fat: fCheck.value,
+        carbs: cCheck.value
+      };
 
       if (targetDate === sourceEntry.date) {
         sourceEntry.items[iIdx] = updatedItem;
@@ -1821,18 +2275,35 @@
     function evaluateFraction(expr) {
       try {
         if (!expr) return 1;
+        if (expr.includes('-')) return NaN;
         if (expr.includes('/')) {
           let parts = expr.split('/');
-          return parseFloat(parts[0]) / parseFloat(parts[1]);
+          if (parts.length !== 2) return NaN;
+          const num = Number(parts[0].trim());
+          const den = Number(parts[1].trim());
+          if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0 || num < 0 || den < 0) return NaN;
+          return num / den;
         }
-        return parseFloat(expr);
+        if (!/^\d+(\.\d+)?$/.test(expr)) return NaN;
+        return Number(expr);
       } catch {
-        return 1;
+        return NaN;
       }
     }
 
     function calculatePortionFromGrams() {
-      const grams = parseFloat(document.getElementById('portionGrams').value) || 0;
+      const rawGrams = document.getElementById('portionGrams').value.trim();
+      if (rawGrams !== '' && hasNonNumericCharacters(rawGrams, true)) {
+        alert(`Invalid portion grams ("${rawGrams}"): non-numeric characters or negative signs are not allowed. Please enter a number and try again.`);
+        document.getElementById('portionGrams').value = '';
+        updatePortionCalculations(0);
+        return;
+      }
+      const grams = parseStrictNonNegativeNumber(rawGrams);
+      if (isNaN(grams) || grams > 10000) {
+        updatePortionCalculations(0);
+        return;
+      }
       const multiplier = grams / 100;
       document.getElementById('portionMultiplier').value = multiplier.toFixed(2);
       updatePortionCalculations(multiplier);
@@ -1841,13 +2312,26 @@
     function calculatePortionFromMultiplier() {
       const expr = document.getElementById('portionMultiplier').value.trim();
       const multiplier = evaluateFraction(expr);
+      if (expr !== '' && (isNaN(multiplier) || multiplier < 0)) {
+        alert(`Invalid multiplier ("${expr}"): non-numeric characters or negative signs are not allowed. Please enter a positive number or fraction and try again.`);
+        document.getElementById('portionMultiplier').value = '1';
+        document.getElementById('portionGrams').value = '100';
+        updatePortionCalculations(1);
+        return;
+      }
+      if (isNaN(multiplier) || multiplier < 0 || multiplier > 100) {
+        document.getElementById('portionGrams').value = '';
+        updatePortionCalculations(0);
+        return;
+      }
       const grams = Math.round(multiplier * 100);
-      document.getElementById('portionGrams').value = isNaN(grams) ? '' : grams;
-      updatePortionCalculations(isNaN(multiplier) ? 1 : multiplier);
+      document.getElementById('portionGrams').value = grams;
+      updatePortionCalculations(multiplier);
     }
 
     function updatePortionCalculations(multiplier) {
       const sel = pendingFoodSelection;
+      if (!sel) return;
       const totalCals = Math.round(sel.calsPer100g * multiplier);
       const totalP = Math.round((sel.pPer100g * multiplier) * 10) / 10;
       const totalF = Math.round((sel.fPer100g * multiplier) * 10) / 10;
@@ -1861,10 +2345,19 @@
 
     function confirmPortionSelection() {
       if (!pendingFoodSelection) return;
-      const finalCals = parseInt(document.getElementById('calculatedItemCals').innerText, 10) || 0;
-      const finalP = parseFloat(document.getElementById('calcP').innerText) || 0;
-      const finalF = parseFloat(document.getElementById('calcF').innerText) || 0;
-      const finalC = parseFloat(document.getElementById('calcC').innerText) || 0;
+      const calCheck = validateFoodCaloriesInput(document.getElementById('calculatedItemCals').innerText);
+      const pCheck = validateMacroInput(document.getElementById('calcP').innerText, 'Protein');
+      const fCheck = validateMacroInput(document.getElementById('calcF').innerText, 'Fat');
+      const cCheck = validateMacroInput(document.getElementById('calcC').innerText, 'Carbs');
+      if (!calCheck.ok || !pCheck.ok || !fCheck.ok || !cCheck.ok) {
+        alert("Invalid portion values detected. Please enter a valid non-negative number and try again.");
+        return;
+      }
+
+      const finalCals = calCheck.value;
+      const finalP = pCheck.value;
+      const finalF = fCheck.value;
+      const finalC = cCheck.value;
       const mealType = document.getElementById('portionMealType').value || getDefaultMealTypeForMountainTime();
 
       const date = document.getElementById('date').value;
@@ -2005,8 +2498,9 @@
               if (cols.length <= Math.max(dateIdx, totalIdx)) continue;
 
               const standardizedDate = parseDateOnly(cols[dateIdx]);
-              let dailyTotal = parseFloat(cols[totalIdx].replace(/[^0-9.]/g, ''));
-              if (isNaN(dailyTotal) || dailyTotal === 0) dailyTotal = 2000;
+              const rawBurn = cols[totalIdx].replace(/[^0-9.]/g, '');
+              const bCheck = validateCaloriesBurnedInput(rawBurn, true);
+              const dailyTotal = bCheck.ok && bCheck.value > 0 ? bCheck.value : 2000;
 
               if (standardizedDate) {
                 importedDates.add(standardizedDate);
@@ -2014,7 +2508,6 @@
               }
             }
 
-            // Replace/remove existing entries only for dates present in the imported file
             if (importedDates.size > 0) {
               const preservedByDate = new Map();
               entries.forEach((existing) => {
@@ -2050,15 +2543,14 @@
 
               const standardizedDate = parseDateOnly(cols[dateIdx]);
               const rawWeight = cols[weightIdx].replace(/[^0-9.]/g, '');
-              const weightVal = parseFloat(rawWeight);
+              const wCheck = validateWeightInput(rawWeight, true);
 
-              if (standardizedDate && !isNaN(weightVal) && weightVal > 0) {
+              if (standardizedDate && wCheck.ok && wCheck.value !== null) {
                 importedDates.add(standardizedDate);
-                byDate.set(standardizedDate, weightVal);
+                byDate.set(standardizedDate, wCheck.value);
               }
             }
 
-            // Replace/remove existing entries only for dates present in the imported file
             if (importedDates.size > 0) {
               const preservedByDate = new Map();
               entries.forEach((existing) => {
@@ -2135,6 +2627,7 @@
       renderDailyQuote();
       renderCelebrationBanner();
       updateEditingBanner();
+      renderBackupDestinationMeta();
       flaggedEntriesMap = detectFlaggedEntries();
       updateFlaggedDeletionsButton();
       
@@ -2157,7 +2650,6 @@
 
       const projMap = computeChainedProjections(entries);
 
-      // Render History Log (10 newest-first entries per page)
       const totalEntries = entries.length;
       if (totalEntries === 0) {
         historyPageOffset = 0;
@@ -2226,7 +2718,6 @@
         document.getElementById('olderHistoryBtn').disabled = (endIdx >= totalEntries);
       }
 
-      // Render Selected Day Food Log Table & Macros Pie Chart
       let todayEntry = entries.find(e => e.date === selectedDate);
       let todayTotalCals = 0;
       let todayTotalP = 0;
