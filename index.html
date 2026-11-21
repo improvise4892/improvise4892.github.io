@@ -472,9 +472,9 @@
   <div class="card card-food">
     <h3>Food Logger</h3>
     
-    <label>Search Food Database:</label>
+    <label>Search Food Database (US & English):</label>
     <div style="display: flex; gap: 8px; align-items: center;">
-      <input type="text" id="dbSearchQuery" placeholder="e.g. apple, oats, protein bar..." style="margin: 4px 0;">
+      <input type="text" id="dbSearchQuery" placeholder="e.g. apple, oats, coffee..." style="margin: 4px 0;">
       <button class="primary-btn" style="width: 120px; margin: 4px 0; flex-shrink: 0;" onclick="searchFoodDatabase()">Search</button>
     </div>
     <div id="dbStatus"></div>
@@ -746,7 +746,6 @@
       const sevenDaysAgo = new Date(todayDate);
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-      // Exclude current day from the 7-day trend data pull
       const weekEntries = entries.filter(e => {
         if (!e.date || e.date >= todayKey) return false;
         const d = new Date(e.date + 'T00:00:00');
@@ -845,7 +844,6 @@
     function computeCelebrations() {
       const list = [];
       const todayKey = getLocalDateKey();
-      // Exclude current day from milestone data pull
       const completedEntries = entries.filter(e => e.date && e.date < todayKey);
       const postNov17 = completedEntries.filter(e => e.date >= START_WEIGHT_DATE);
       const startEntry = postNov17.find(e => e.weight !== null);
@@ -1304,6 +1302,31 @@
       document.getElementById('editFoodModal').style.display = 'none';
     }
 
+    function formatCategoryLabel(prod) {
+      const catTags = Array.isArray(prod.categories_tags) ? prod.categories_tags : [];
+      const enTag = catTags.find(tag => tag.startsWith('en:'));
+      if (enTag) {
+        return enTag.replace(/^en:/, '').replace(/-/g, ' ');
+      }
+      if (prod.categories) {
+        const firstCat = String(prod.categories).split(',')[0].trim();
+        if (/^[\x00-\x7F\s\-&,()]+$/.test(firstCat)) return firstCat;
+      }
+      return '';
+    }
+
+    function isLikelyEnglishText(str) {
+      if (!str) return false;
+      if (/[^\u0000-\u024F]/.test(str)) return false;
+      if (/[äöüßæøåéèêëàâçîïôùûüñ¿¡]/i.test(str)) return false;
+      return true;
+    }
+
+    function isUSProduct(prod) {
+      const countries = Array.isArray(prod.countries_tags) ? prod.countries_tags : [];
+      return countries.includes('en:united-states');
+    }
+
     async function searchFoodDatabase() {
       const query = document.getElementById('dbSearchQuery').value.trim();
       if (!query) {
@@ -1311,31 +1334,43 @@
         return;
       }
 
-      showStatus("Searching English food results...", "info", "dbStatus");
+      const queryTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
+
+      showStatus("Searching US English food results...", "info", "dbStatus");
       try {
-        const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=30&lc=en&tagtype_0=languages&tag_contains_0=contains&tag_0=en`;
+        const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=50&lc=en&tagtype_0=countries&tag_contains_0=contains&tag_0=united-states&fields=product_name,product_name_en,brands,categories,categories_tags,countries_tags,lang,nutriments`;
         const response = await fetch(url);
         const data = await response.json();
 
         const rawProducts = Array.isArray(data.products) ? data.products : [];
         const filteredProducts = rawProducts.filter((prod) => {
           const englishName = (prod.product_name_en || '').trim();
-          const fallbackName = (prod.product_name || '').trim();
-          const displayName = englishName || fallbackName;
+          const rawName = (prod.product_name || '').trim();
+          const displayName = englishName || rawName;
 
           if (!displayName) return false;
           const lowerName = displayName.toLowerCase();
-          if (lowerName === 'unknown product' || lowerName === 'unknown' || lowerName === 'n/a') {
+          if (['unknown product', 'unknown', 'n/a', 'none', 'null'].includes(lowerName)) {
             return false;
           }
 
-          const langs = Array.isArray(prod.languages_tags) ? prod.languages_tags : [];
-          const hasEnglishTag = langs.includes('en:english');
-          return Boolean(englishName) || hasEnglishTag || !langs.length;
+          // Restrict to US products
+          if (!isUSProduct(prod)) return false;
+
+          // Restrict to English products/text
+          const isEnglishProduct = Boolean(englishName) || prod.lang === 'en';
+          if (!isEnglishProduct) return false;
+          if (!isLikelyEnglishText(displayName)) return false;
+
+          // Require every search term to be in the product name
+          const hasSearchTermInName = queryTerms.every(term => lowerName.includes(term));
+          if (!hasSearchTermInName) return false;
+
+          return true;
         });
 
         if (filteredProducts.length === 0) {
-          showStatus("No matching English foods found in database.", "error", "dbStatus");
+          showStatus("No matching US English foods with that name found in database.", "error", "dbStatus");
           return;
         }
 
@@ -1343,7 +1378,8 @@
         let resultsHtml = '';
         productsCache.forEach((prod, index) => {
           const name = (prod.product_name_en || prod.product_name || '').trim();
-          const brand = prod.brands ? `(${prod.brands})` : "";
+          const brand = prod.brands && isLikelyEnglishText(prod.brands) ? `(${prod.brands.trim()})` : "";
+          const category = formatCategoryLabel(prod);
           const nut = prod.nutriments || {};
           const cals = Math.round(nut['energy-kcal_100g'] || nut['energy-kcal'] || 100);
           const p = Math.round((nut['proteins_100g'] || nut['proteins'] || 0) * 10) / 10;
@@ -1351,7 +1387,9 @@
           const c = Math.round((nut['carbohydrates_100g'] || nut['carbohydrates'] || 0) * 10) / 10;
 
           resultsHtml += `<div class="search-result-item" onclick="selectCachedProduct(${index})">
-            <b>${name}</b> ${brand}<br><small style="color: #555;">Per 100g: <b>${cals} cals</b> | P: ${p}g, F: ${f}g, C: ${c}g</small>
+            <b>${name}</b> ${brand}
+            ${category ? `<br><small style="color: #2f6f5e; font-weight: 600;">Category: ${category}</small>` : ''}
+            <br><small style="color: #555;">Per 100g: <b>${cals} cals</b> | P: ${p}g, F: ${f}g, C: ${c}g</small>
           </div>`;
         });
 
@@ -1367,7 +1405,7 @@
       const prod = productsCache[index];
       if (!prod) return;
       const name = (prod.product_name_en || prod.product_name || '').trim();
-      const brand = prod.brands ? `(${prod.brands})` : "";
+      const brand = prod.brands && isLikelyEnglishText(prod.brands) ? `(${prod.brands.trim()})` : "";
       const nut = prod.nutriments || {};
       const cals = nut['energy-kcal_100g'] || nut['energy-kcal'] || 100;
       const p = nut['proteins_100g'] || nut['proteins'] || 0;
