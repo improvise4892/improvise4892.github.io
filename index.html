@@ -64,9 +64,9 @@
     .top-date-bar label {
       margin: 0;
       white-space: nowrap;
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--muted);
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--ink);
     }
 
     .top-date-bar input[type="date"] {
@@ -340,30 +340,32 @@
     }
 
     button.delete-btn {
-      background: #c96464;
-      color: white;
-      border: none;
-      padding: 4px 8px;
+      background: #eceae4;
+      color: #4f4a42;
+      border: 1px solid #d4cfc5;
+      padding: 3px 7px;
       cursor: pointer;
       border-radius: 5px;
       width: auto;
-      font-size: 12px;
+      margin: 0;
+      font-size: 11px;
+      font-weight: 500;
     }
-    button.delete-btn:hover { background: #ad4d4d; }
+    button.delete-btn:hover { background: #e1ddd3; color: #35312b; }
 
     button.edit-btn {
-      background: #dfb85c;
-      color: #1f2925;
-      border: none;
-      padding: 4px 8px;
+      background: #eef1ef;
+      color: #2c3833;
+      border: 1px solid #cfd8d3;
+      padding: 3px 7px;
       cursor: pointer;
       border-radius: 5px;
       width: auto;
-      margin-right: 3px;
-      font-size: 12px;
-      font-weight: 600;
+      margin: 0 3px 0 0;
+      font-size: 11px;
+      font-weight: 500;
     }
-    button.edit-btn:hover { background: #cca345; }
+    button.edit-btn:hover { background: #e1e7e4; color: #1b2420; }
 
     button.secondary-btn {
       background: #64746e;
@@ -568,7 +570,7 @@
       <p style="font-size: 13px; color: var(--muted); margin-bottom: 5px;">Total Consumed Today: <b id="todayTotalCals" style="color: var(--ink);">0</b> cals</p>
       
       <!-- Macro Pie Chart Container -->
-      <div style="max-width: 240px; margin: 14px auto; position: relative;">
+      <div style="max-width: 175px; margin: 12px auto; position: relative;">
         <canvas id="macroPieChart"></canvas>
       </div>
 
@@ -589,13 +591,13 @@
 
   <!-- Collapsible Section 2: Weight & Calorie History Log -->
   <details open>
-    <summary>📋 Weight & History Log (20 Entries Per Page)</summary>
+    <summary>📋 Weight & History Log (10 Entries Per Page)</summary>
     <div style="margin-top: 10px;">
       <div class="history-pager">
         <span class="history-range-label" id="historyRangeLabel">No entries yet</span>
         <div class="history-pager-buttons">
-          <button type="button" class="secondary-btn" id="newerHistoryBtn" onclick="changeHistoryPage(-1)">◀ Newer 20</button>
-          <button type="button" class="secondary-btn" id="olderHistoryBtn" onclick="changeHistoryPage(1)">Older 20 ▶</button>
+          <button type="button" class="secondary-btn" id="newerHistoryBtn" onclick="changeHistoryPage(-1)">◀ Newer 10</button>
+          <button type="button" class="secondary-btn" id="olderHistoryBtn" onclick="changeHistoryPage(1)">Older 10 ▶</button>
         </div>
       </div>
       <table>
@@ -710,7 +712,7 @@
 
   <script>
     const START_WEIGHT_DATE = '2026-11-17';
-    const HISTORY_PAGE_SIZE = 20;
+    const HISTORY_PAGE_SIZE = 10;
 
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
     let chartMonth, chartYear, macroPieChart = null;
@@ -1202,6 +1204,11 @@
     }
 
     function deleteEntry(index) {
+      const entry = entries[index];
+      const dateLabel = entry ? formatDateDisplay(entry.date) : 'this entry';
+      if (!confirm(`Are you sure you want to delete the entry for ${dateLabel}?`)) {
+        return;
+      }
       entries.splice(index, 1);
       sortEntries();
       localStorage.setItem('weightData', JSON.stringify(entries));
@@ -1636,7 +1643,7 @@
 
       const projMap = computeChainedProjections(entries);
 
-      // Render History Log (20 newest-first entries per page)
+      // Render History Log (10 newest-first entries per page)
       const totalEntries = entries.length;
       if (totalEntries === 0) {
         historyPageOffset = 0;
