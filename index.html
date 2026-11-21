@@ -20,8 +20,8 @@
       --accent-hover: #24574a;
       --accent-soft: #e6f0ec;
       --warm-soft: #fbf4ea;
-      --gold-soft: #fff8e6;
-      --gold-border: #e6c36a;
+      --calm-sand-soft: #f5efe2;
+      --calm-sand-border: #d9ccb2;
     }
 
     * { box-sizing: border-box; }
@@ -128,29 +128,29 @@
 
     .celebration-banner {
       display: none;
-      background: linear-gradient(135deg, #fffdf6 0%, var(--gold-soft) 100%);
-      border: 1px solid var(--gold-border);
-      border-left: 5px solid #d49b1a;
+      background: linear-gradient(135deg, #fdfbf6 0%, var(--calm-sand-soft) 100%);
+      border: 1px solid var(--calm-sand-border);
+      border-left: 5px solid #8c9e78;
       padding: 13px 16px;
       border-radius: 11px;
       margin-bottom: 14px;
-      color: #3a2b07;
-      box-shadow: 0 6px 18px rgba(180, 130, 20, 0.11);
+      color: #2b3528;
+      box-shadow: 0 4px 14px rgba(43, 53, 40, 0.05);
     }
 
     .celebration-banner.tier-150 {
-      background: linear-gradient(135deg, #fff8f2 0%, #ffe8d6 100%);
-      border-color: #e89b64;
-      border-left-color: #c85a17;
-      color: #4a1e05;
+      background: linear-gradient(135deg, #f3f7f5 0%, #dfebe5 100%);
+      border-color: #b7cec4;
+      border-left-color: #4f7d6e;
+      color: #1e352d;
     }
 
     .celebration-banner.tier-140 {
-      background: linear-gradient(135deg, #f3fbf8 0%, #d8f3e8 55%, #fff5d6 100%);
-      border-color: #4ea884;
-      border-left-color: #1b7a56;
-      color: #103829;
-      box-shadow: 0 8px 22px rgba(27, 122, 86, 0.16);
+      background: linear-gradient(135deg, #eef6f3 0%, #d7eae2 65%, #f3efe4 100%);
+      border-color: #9ec2b3;
+      border-left-color: #2f6f5e;
+      color: #163028;
+      box-shadow: 0 6px 18px rgba(47, 111, 94, 0.09);
     }
 
     .celebration-header {
@@ -168,7 +168,8 @@
       letter-spacing: 0.05em;
       padding: 2px 8px;
       border-radius: 999px;
-      background: rgba(212, 155, 26, 0.18);
+      background: rgba(79, 125, 110, 0.14);
+      color: #28463c;
     }
 
     .celebration-message {
@@ -180,7 +181,7 @@
     .celebration-sub {
       margin-top: 6px;
       font-size: 12px;
-      opacity: 0.85;
+      color: var(--muted);
     }
 
     .celebration-cycle-btn {
@@ -189,8 +190,9 @@
       padding: 3px 9px;
       font-size: 11px;
       font-weight: 600;
-      background: rgba(255, 255, 255, 0.78);
-      border: 1px solid rgba(0, 0, 0, 0.14);
+      background: rgba(255, 255, 255, 0.82);
+      color: var(--ink);
+      border: 1px solid rgba(31, 41, 37, 0.16);
       border-radius: 6px;
       cursor: pointer;
     }
@@ -276,7 +278,7 @@
     }
 
     button.delete-btn {
-      background: #dc4c4c;
+      background: #c96464;
       color: white;
       border: none;
       padding: 4px 8px;
@@ -285,10 +287,10 @@
       width: auto;
       font-size: 12px;
     }
-    button.delete-btn:hover { background: #b83737; }
+    button.delete-btn:hover { background: #ad4d4d; }
 
     button.edit-btn {
-      background: #eab308;
+      background: #dfb85c;
       color: #1f2925;
       border: none;
       padding: 4px 8px;
@@ -299,7 +301,7 @@
       font-size: 12px;
       font-weight: 600;
     }
-    button.edit-btn:hover { background: #ca9a04; }
+    button.edit-btn:hover { background: #cca345; }
 
     button.secondary-btn {
       background: #64746e;
@@ -322,7 +324,7 @@
 
     button.danger-outline {
       background: #fff;
-      color: #b83737;
+      color: #a84545;
       border: 1px solid #e2b4b4;
       margin-top: 8px;
       cursor: pointer;
@@ -426,7 +428,7 @@
     </div>
     <div id="dbStatus"></div>
 
-    <button class="secondary-btn" style="background: #c96a2b;" onclick="startBarcodeScanner()">📷 Scan Barcode via Camera</button>
+    <button class="secondary-btn" style="background: #6f8a7e;" onclick="startBarcodeScanner()">📷 Scan Barcode via Camera</button>
     <div id="scannerStatus"></div>
 
     <details style="margin-top: 12px; padding: 9px 12px; background: rgba(255,255,255,0.75);">
