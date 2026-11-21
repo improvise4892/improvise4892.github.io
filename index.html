@@ -539,7 +539,6 @@
     <div style="margin-top: 10px;">
       <p style="margin: 6px 0;"><strong>Expected Weight in 4 Weeks:</strong> <span id="proj4Weeks">--</span> lbs</p>
       <ul style="margin: 6px 0 0; padding-left: 20px; font-size: 14px; color: var(--muted);">
-        <li><strong>Today's Est. Change:</strong> <span id="change1Day">--</span> lbs</li>
         <li><strong>Past 3 Days Est. Change:</strong> <span id="change3Days">--</span> lbs</li>
         <li><strong>Past Week Est. Change:</strong> <span id="change1Week">--</span> lbs</li>
         <li><strong>Past Month Est. Change:</strong> <span id="change1Month">--</span> lbs</li>
@@ -1818,7 +1817,6 @@
         const proj4Wk = getChained4WeekProjection(projMap, completedEntries);
         document.getElementById('proj4Weeks').innerText = proj4Wk !== null ? proj4Wk : '--';
 
-        document.getElementById('change1Day').innerText = getWindowChange(1, completedEntries);
         document.getElementById('change3Days').innerText = getWindowChange(3, completedEntries);
         document.getElementById('change1Week').innerText = getWindowChange(7, completedEntries);
         document.getElementById('change1Month').innerText = getWindowChange(30, completedEntries);
@@ -1838,82 +1836,4 @@
 
       let totalNet = 0;
       scoped.forEach(e => {
-        totalNet += ((e.calories || 0) - (e.caloriesBurned || 2000));
-      });
-      const avgDailyNet = totalNet / scoped.length;
-      const weeklyRate = (avgDailyNet / 3500) * 7;
-      return parseFloat((lastProj + (weeklyRate * 4)).toFixed(1));
-    }
-
-    function updateMacroPieChart(p, f, c) {
-      const ctx = document.getElementById('macroPieChart').getContext('2d');
-      const hasData = (p > 0 || f > 0 || c > 0);
-      const softPalette = ['#679480', '#d8b377', '#7895a8'];
-      const emptyPalette = ['#e4e9e6', '#e4e9e6', '#e4e9e6'];
-
-      if (macroPieChart) {
-        macroPieChart.data.labels = hasData ? ['Protein (g)', 'Fat (g)', 'Carbs (g)'] : ['No Macros Logged'];
-        macroPieChart.data.datasets[0].data = hasData ? [p, f, c] : [1, 1, 1];
-        macroPieChart.data.datasets[0].backgroundColor = hasData ? softPalette : emptyPalette;
-        macroPieChart.options.plugins.tooltip.enabled = hasData;
-        macroPieChart.update();
-        return;
-      }
-
-      macroPieChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: hasData ? ['Protein (g)', 'Fat (g)', 'Carbs (g)'] : ['No Macros Logged'],
-          datasets: [{
-            data: hasData ? [p, f, c] : [1, 1, 1],
-            backgroundColor: hasData ? softPalette : emptyPalette,
-            borderColor: '#ffffff',
-            borderWidth: 1.5
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: {
-              position: 'bottom',
-              labels: { color: '#5b6862', boxWidth: 10, font: { size: 11 } }
-            },
-            tooltip: { enabled: hasData }
-          }
-        }
-      });
-    }
-
-    function getWindowChange(days, completedEntries = null) {
-      const todayKey = getLocalDateKey();
-      const baseEntries = completedEntries || entries.filter(e => e.date && e.date < todayKey);
-      if (baseEntries.length === 0) return "0.0";
-      const scoped = baseEntries.filter(e => e.date >= START_WEIGHT_DATE);
-      const source = scoped.length > 0 ? scoped : baseEntries;
-      let latestDate = new Date(source[source.length - 1].date);
-      let totalNet = 0;
-      let count = 0;
-
-      source.forEach(e => {
-        let eDate = new Date(e.date);
-        let diffTime = latestDate - eDate;
-        let diffDays = diffTime / (1000 * 3600 * 24);
-        if (diffDays >= 0 && diffDays < days) {
-          totalNet += ((e.calories || 0) - (e.caloriesBurned || 2000));
-          count++;
-        }
-      });
-
-      if (count === 0) {
-        const last = source[source.length - 1];
-        totalNet = (last.calories || 0) - (last.caloriesBurned || 2000);
-      }
-      let windowPounds = (totalNet / 3500); 
-      return windowPounds >= 0 ? `+${windowPounds.toFixed(2)}` : windowPounds.toFixed(2);
-    }
-
-    document.getElementById('date').addEventListener('change', renderAll);
-    window.onload = init;
-  </script>
-</body>
-</html>
+        totalNet += ((e.calories || 0
