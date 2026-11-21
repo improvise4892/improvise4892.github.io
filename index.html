@@ -442,6 +442,17 @@
       border: 1px solid var(--border);
     }
     .search-result-item:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+    .editing-indicator {
+      display: none;
+      margin-top: 6px;
+      padding: 6px 10px;
+      border-radius: 7px;
+      background: #eef5f2;
+      border: 1px solid #bfd6cc;
+      font-size: 12px;
+      color: #21463b;
+    }
   </style>
 </head>
 <body>
@@ -518,6 +529,10 @@
   <!-- Weight & Calories Burned Log Box -->
   <div class="card card-weight">
     <h3>Log Weight & Burned Calories</h3>
+    <div class="editing-indicator" id="editingEntryBanner">
+      <span>Editing entry originally dated <strong id="editingOriginalDateLabel">--</strong>. Change <strong>Active Date</strong> above to move it to another day.</span>
+      <button type="button" class="delete-btn" style="margin-left: 8px;" onclick="cancelEditingEntry()">Cancel Edit</button>
+    </div>
     
     <div class="row-grid">
       <div>
@@ -660,6 +675,14 @@
     <div class="modal-content">
       <h3 style="margin-top:0;" id="portionFoodTitle">Adjust Portion</h3>
       <p style="font-size: 13px; color: #666;">Database nutritional values are per 100g. Enter how many grams you ate OR a fraction/multiplier.</p>
+
+      <label>Meal Type:</label>
+      <select id="portionMealType">
+        <option value="Snack">Snack</option>
+        <option value="Breakfast">Breakfast</option>
+        <option value="Lunch">Lunch</option>
+        <option value="Dinner">Dinner</option>
+      </select>
       
       <label>Amount in Grams (e.g. 150):</label>
       <input type="number" id="portionGrams" placeholder="e.g. 150" oninput="calculatePortionFromGrams()">
@@ -722,6 +745,7 @@
     let activeCelebrations = [];
     let celebrationIndex = 0;
     let historyPageOffset = 0;
+    let editingEntryOriginalDate = null;
 
     function getLocalDateKey() {
       const now = new Date();
@@ -729,6 +753,36 @@
       const m = String(now.getMonth() + 1).padStart(2, '0');
       const d = String(now.getDate()).padStart(2, '0');
       return `${y}-${m}-${d}`;
+    }
+
+    function getDefaultMealTypeForMountainTime() {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Denver',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).formatToParts(new Date());
+
+      let hour = 0;
+      let minute = 0;
+      for (const part of parts) {
+        if (part.type === 'hour') hour = parseInt(part.value, 10) % 24;
+        if (part.type === 'minute') minute = parseInt(part.value, 10);
+      }
+
+      const minutesSinceMidnight = hour * 60 + minute;
+      if (minutesSinceMidnight < 10 * 60) return 'Breakfast'; // Midnight to 10:00 AM
+      if (minutesSinceMidnight < 14 * 60 + 30) return 'Lunch'; // 10:00 AM to 2:30 PM
+      if (minutesSinceMidnight < 21 * 60) return 'Dinner'; // 2:30 PM to 9:00 PM
+      return 'Snack'; // 9:00 PM to Midnight
+    }
+
+    function applyDefaultMealTypeSelectors() {
+      const defaultMeal = getDefaultMealTypeForMountainTime();
+      const manualSelect = document.getElementById('manualMealType');
+      const portionSelect = document.getElementById('portionMealType');
+      if (manualSelect) manualSelect.value = defaultMeal;
+      if (portionSelect) portionSelect.value = defaultMeal;
     }
 
     function getDailySeedIndex(dateKey, length) {
@@ -1144,6 +1198,8 @@
       if (confirm("Are you sure you want to delete all stored entries?")) {
         entries = [];
         historyPageOffset = 0;
+        editingEntryOriginalDate = null;
+        updateEditingBanner();
         localStorage.removeItem('weightData');
         renderAll();
         showStatus("All entries cleared.", "info");
@@ -1153,6 +1209,7 @@
     function init() {
       const todayStr = getLocalDateKey();
       document.getElementById('date').value = todayStr;
+      applyDefaultMealTypeSelectors();
       initCharts();
       renderAll();
     }
@@ -1199,6 +1256,30 @@
       document.getElementById('manualProtein').value = '0';
       document.getElementById('manualFat').value = '0';
       document.getElementById('manualCarbs').value = '0';
+      document.getElementById('manualMealType').value = getDefaultMealTypeForMountainTime();
+    }
+
+    function updateEditingBanner() {
+      const banner = document.getElementById('editingEntryBanner');
+      const labelEl = document.getElementById('editingOriginalDateLabel');
+      if (!banner || !labelEl) return;
+
+      if (editingEntryOriginalDate) {
+        labelEl.innerText = formatDateDisplay(editingEntryOriginalDate);
+        banner.style.display = 'flex';
+        banner.style.alignItems = 'center';
+        banner.style.justifyContent = 'space-between';
+      } else {
+        labelEl.innerText = '--';
+        banner.style.display = 'none';
+      }
+    }
+
+    function cancelEditingEntry() {
+      editingEntryOriginalDate = null;
+      document.getElementById('weight').value = '';
+      document.getElementById('caloriesBurned').value = '';
+      updateEditingBanner();
     }
 
     function saveWeightAndBurned() {
@@ -1211,16 +1292,55 @@
         return;
       }
 
-      let existing = entries.find(e => e.date === date);
-      if (!existing) {
-        existing = { date, weight: null, calories: 2200, caloriesBurned: 2000, items: [] };
-        entries.push(existing);
+      const origDate = editingEntryOriginalDate;
+      const origEntry = origDate ? entries.find(e => e.date === origDate) : null;
+
+      let targetEntry = entries.find(e => e.date === date);
+      if (!targetEntry) {
+        targetEntry = {
+          date,
+          weight: origEntry ? origEntry.weight : null,
+          calories: origEntry ? (origEntry.calories || 0) : 2200,
+          caloriesBurned: origEntry ? (origEntry.caloriesBurned || 2000) : 2000,
+          items: origEntry && Array.isArray(origEntry.items) ? [...origEntry.items] : []
+        };
+        entries.push(targetEntry);
+      } else if (origEntry && origEntry !== targetEntry) {
+        // Merge food items and calories when moving an entry onto an existing date
+        const mergedItems = [
+          ...(Array.isArray(targetEntry.items) ? targetEntry.items : []),
+          ...(Array.isArray(origEntry.items) ? origEntry.items : [])
+        ];
+        targetEntry.items = mergedItems;
+        if (mergedItems.length > 0) {
+          targetEntry.calories = mergedItems.reduce((sum, i) => sum + i.calories, 0);
+        } else if (origEntry.calories !== undefined) {
+          targetEntry.calories = origEntry.calories;
+        }
+        if (targetEntry.weight === null && origEntry.weight !== null) {
+          targetEntry.weight = origEntry.weight;
+        }
+        if (burnedVal === "" && origEntry.caloriesBurned) {
+          targetEntry.caloriesBurned = origEntry.caloriesBurned;
+        }
       }
 
-      if (weightVal !== "") existing.weight = parseFloat(weightVal);
-      if (burnedVal !== "" && parseFloat(burnedVal) !== 0) {
-        existing.caloriesBurned = parseFloat(burnedVal);
+      if (weightVal !== "") {
+        targetEntry.weight = parseFloat(weightVal);
       }
+      if (burnedVal !== "" && parseFloat(burnedVal) !== 0) {
+        targetEntry.caloriesBurned = parseFloat(burnedVal);
+      }
+
+      if (origEntry && origEntry !== targetEntry) {
+        const origIdx = entries.indexOf(origEntry);
+        if (origIdx !== -1) {
+          entries.splice(origIdx, 1);
+        }
+      }
+
+      editingEntryOriginalDate = null;
+      updateEditingBanner();
 
       sortEntries();
       localStorage.setItem('weightData', JSON.stringify(entries));
@@ -1233,9 +1353,12 @@
 
     function editEntry(index) {
       const entry = entries[index];
+      if (!entry) return;
+      editingEntryOriginalDate = entry.date;
       document.getElementById('date').value = entry.date;
       document.getElementById('weight').value = entry.weight !== null ? entry.weight : '';
       document.getElementById('caloriesBurned').value = entry.caloriesBurned;
+      updateEditingBanner();
       renderAll();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -1245,6 +1368,10 @@
       const dateLabel = entry ? formatDateDisplay(entry.date) : 'this entry';
       if (!confirm(`Are you sure you want to delete the entry for ${dateLabel}?`)) {
         return;
+      }
+      if (entry && entry.date === editingEntryOriginalDate) {
+        editingEntryOriginalDate = null;
+        updateEditingBanner();
       }
       entries.splice(index, 1);
       sortEntries();
@@ -1422,6 +1549,7 @@
     function openPortionModal(name, calsPer100g, pPer100g, fPer100g, cPer100g) {
       pendingFoodSelection = { name, calsPer100g, pPer100g, fPer100g, cPer100g };
       document.getElementById('portionFoodTitle').innerText = `Portion for: ${name}`;
+      document.getElementById('portionMealType').value = getDefaultMealTypeForMountainTime();
       document.getElementById('portionGrams').value = '100';
       document.getElementById('portionMultiplier').value = '1';
       document.getElementById('calculatedItemCals').innerText = Math.round(calsPer100g);
@@ -1480,7 +1608,7 @@
       const finalP = parseFloat(document.getElementById('calcP').innerText) || 0;
       const finalF = parseFloat(document.getElementById('calcF').innerText) || 0;
       const finalC = parseFloat(document.getElementById('calcC').innerText) || 0;
-      const mealType = document.getElementById('manualMealType').value;
+      const mealType = document.getElementById('portionMealType').value || getDefaultMealTypeForMountainTime();
 
       const date = document.getElementById('date').value;
       let existing = entries.find(e => e.date === date);
@@ -1498,6 +1626,7 @@
       renderAll();
 
       document.getElementById('portionModal').style.display = 'none';
+      document.getElementById('manualMealType').value = getDefaultMealTypeForMountainTime();
       pendingFoodSelection = null;
       showStatus("Food item added to log successfully!", "success", "dbStatus");
     }
@@ -1722,6 +1851,7 @@
       sortEntries();
       renderDailyQuote();
       renderCelebrationBanner();
+      updateEditingBanner();
       
       let historyTableHtml = '';
       let todayFoodTableHtml = '';
