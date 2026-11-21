@@ -534,7 +534,7 @@
   </div>
 
   <!-- Collapsible Trend Analysis -->
-  <details id="statsCard" style="display:none;">
+  <details id="statsCard" open style="display:none;">
     <summary>Trend Analysis (Chained From Nov 17 Weight)</summary>
     <div style="margin-top: 10px;">
       <p style="margin: 6px 0;"><strong>Expected Weight in 4 Weeks:</strong> <span id="proj4Weeks">--</span> lbs</p>
@@ -1634,12 +1634,16 @@
       const map = new Map();
       if (!allEntries || allEntries.length === 0) return map;
 
-      const anchorIdx = allEntries.findIndex(e => e.date >= START_WEIGHT_DATE && e.weight !== null);
+      const todayKey = getLocalDateKey();
+      const completedEntries = allEntries.filter(e => e.date && e.date < todayKey);
+      if (completedEntries.length === 0) return map;
+
+      const anchorIdx = completedEntries.findIndex(e => e.date >= START_WEIGHT_DATE && e.weight !== null);
       if (anchorIdx === -1) return map;
 
-      let prevProjectedWeight = allEntries[anchorIdx].weight;
-      for (let i = anchorIdx; i < allEntries.length; i++) {
-        const e = allEntries[i];
+      let prevProjectedWeight = completedEntries[anchorIdx].weight;
+      for (let i = anchorIdx; i < completedEntries.length; i++) {
+        const e = completedEntries[i];
         const consumed = e.calories || 0;
         const burned = e.caloriesBurned || 2000;
         const netDelta = (consumed - burned) / 3500;
@@ -1807,22 +1811,26 @@
 
       document.getElementById('historyTableBody').innerHTML = historyTableHtml;
 
-      if (entries.length > 0) {
+      const todayKey = getLocalDateKey();
+      const completedEntries = entries.filter(e => e.date && e.date < todayKey);
+      if (completedEntries.length > 0) {
         document.getElementById('statsCard').style.display = 'block';
-        const proj4Wk = getChained4WeekProjection(projMap);
+        const proj4Wk = getChained4WeekProjection(projMap, completedEntries);
         document.getElementById('proj4Weeks').innerText = proj4Wk !== null ? proj4Wk : '--';
 
-        document.getElementById('change1Day').innerText = getWindowChange(1);
-        document.getElementById('change3Days').innerText = getWindowChange(3);
-        document.getElementById('change1Week').innerText = getWindowChange(7);
-        document.getElementById('change1Month').innerText = getWindowChange(30);
+        document.getElementById('change1Day').innerText = getWindowChange(1, completedEntries);
+        document.getElementById('change3Days').innerText = getWindowChange(3, completedEntries);
+        document.getElementById('change1Week').innerText = getWindowChange(7, completedEntries);
+        document.getElementById('change1Month').innerText = getWindowChange(30, completedEntries);
       } else {
         document.getElementById('statsCard').style.display = 'none';
       }
     }
 
-    function getChained4WeekProjection(projMap) {
-      const scoped = entries.filter(e => e.date >= START_WEIGHT_DATE && projMap.has(e.date));
+    function getChained4WeekProjection(projMap, completedEntries = null) {
+      const todayKey = getLocalDateKey();
+      const baseEntries = completedEntries || entries.filter(e => e.date && e.date < todayKey);
+      const scoped = baseEntries.filter(e => e.date >= START_WEIGHT_DATE && projMap.has(e.date));
       if (scoped.length === 0) return null;
 
       const lastEntry = scoped[scoped.length - 1];
@@ -1876,10 +1884,12 @@
       });
     }
 
-    function getWindowChange(days) {
-      if (entries.length === 0) return "0.0";
-      const scoped = entries.filter(e => e.date >= START_WEIGHT_DATE);
-      const source = scoped.length > 0 ? scoped : entries;
+    function getWindowChange(days, completedEntries = null) {
+      const todayKey = getLocalDateKey();
+      const baseEntries = completedEntries || entries.filter(e => e.date && e.date < todayKey);
+      if (baseEntries.length === 0) return "0.0";
+      const scoped = baseEntries.filter(e => e.date >= START_WEIGHT_DATE);
+      const source = scoped.length > 0 ? scoped : baseEntries;
       let latestDate = new Date(source[source.length - 1].date);
       let totalNet = 0;
       let count = 0;
