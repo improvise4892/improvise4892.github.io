@@ -238,9 +238,17 @@
       box-shadow: 0 4px 14px rgba(24, 39, 33, 0.04);
     }
 
+    .spider-card {
+      margin-top: 14px;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+
     .spider-wrapper {
-      max-width: 420px;
-      margin: 8px auto 4px;
+      max-width: 390px;
+      margin: 6px auto 4px;
       position: relative;
     }
 
@@ -648,17 +656,6 @@
     </div>
   </details>
 
-  <!-- Spider Web Chart: Body Composition vs. Ideal Health Perimeter -->
-  <div class="chart-container">
-    <h3 class="chart-title">Body Composition Health Web (<span id="spiderReadingLabel">Latest Renpho Reading</span>)</h3>
-    <div class="spider-wrapper">
-      <canvas id="bodyCompSpiderChart"></canvas>
-    </div>
-    <div class="spider-meta" id="spiderReadingSummary">
-      Import a Renpho CSV to plot <strong>% Body Fat</strong>, <strong>% Muscle Mass</strong>, and <strong>% Body Water</strong>. Outer ring (100%) = closer to ideal recommended health range.
-    </div>
-  </div>
-
   <!-- Two Charts: Past Month & Past Year -->
   <div class="chart-container">
     <h3 class="chart-title">Past Month View</h3>
@@ -670,7 +667,7 @@
     <canvas id="chartYear"></canvas>
   </div>
 
-  <!-- Collapsible Section 1: Selected Day Food Log & Macro Pie Chart -->
+  <!-- Collapsible Section 1: Selected Day Food Log, Macro Pie Chart & Body Comp Spider Chart -->
   <details open>
     <summary>Food Log & Macros for: <span id="currentDateHeader">--</span></summary>
     <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;">
@@ -684,6 +681,17 @@
       <!-- Macro Pie Chart Container -->
       <div style="max-width: 175px; margin: 12px auto; position: relative;">
         <canvas id="macroPieChart"></canvas>
+      </div>
+
+      <!-- Spider Web Chart right after Macros Pie Chart -->
+      <div class="spider-card">
+        <h3 class="chart-title" style="text-align:center;">Body Composition Health Web (<span id="spiderReadingLabel">Latest Renpho Reading</span>)</h3>
+        <div class="spider-wrapper">
+          <canvas id="bodyCompSpiderChart"></canvas>
+        </div>
+        <div class="spider-meta" id="spiderReadingSummary">
+          Import a Renpho CSV to plot <strong>% Body Fat</strong>, <strong>% Muscle Mass</strong>, and <strong>% Body Water</strong>. Outer ring (100%) = closer to ideal recommended health range.
+        </div>
       </div>
 
       <table>
@@ -940,7 +948,6 @@
       };
     }
 
-    // Perimeter (100) = closer to recommended health range
     function scoreBodyFatProximity(bf) {
       if (bf === null || bf === undefined || isNaN(bf)) return null;
       if (bf >= 18 && bf <= 25) return 100;
@@ -1775,6 +1782,80 @@
           message: `Surprise data highlight! Across ${weekMetrics.dayCount} completed days this past week, your data points to ${weekMetrics.projectedLbs.toFixed(2)} lbs of projected change.`,
           sub: `Based on last 7 completed days of logged calories & burn`
         });
+      }
+
+      // Surprise milestones for % Body Fat, % Muscle Mass, and % Body Water
+      const compEntries = entries.filter(e =>
+        e && (
+          (e.bodyFatPct !== null && e.bodyFatPct !== undefined && !isNaN(e.bodyFatPct)) ||
+          (e.musclePct !== null && e.musclePct !== undefined && !isNaN(e.musclePct)) ||
+          (e.bodyWaterPct !== null && e.bodyWaterPct !== undefined && !isNaN(e.bodyWaterPct))
+        )
+      );
+
+      if (compEntries.length > 0) {
+        const latestComp = compEntries[compEntries.length - 1];
+        const prevComp = compEntries.length > 1 ? compEntries[compEntries.length - 2] : null;
+
+        // % Body Fat surprise milestone
+        if (latestComp.bodyFatPct !== null && latestComp.bodyFatPct !== undefined) {
+          const bf = latestComp.bodyFatPct;
+          const bfMassTxt = latestComp.bodyFatMass !== null && latestComp.bodyFatMass !== undefined ? ` (${latestComp.bodyFatMass} lb)` : '';
+          if (bf <= 25) {
+            list.push({
+              tierClass: 'tier-140',
+              badge: 'SURPRISE MILESTONE · IDEAL BODY FAT %',
+              message: `Surprise body comp win! Your % Body Fat reached ${bf}%${bfMassTxt} on ${formatDateDisplay(latestComp.date)}, right inside the ideal 18–25% target zone!`,
+              sub: `Body Fat Percentage & Body Fat Mass from Renpho`
+            });
+          } else if (bf < 33.5) {
+            const deltaTxt = prevComp && prevComp.bodyFatPct !== null && prevComp.bodyFatPct !== undefined
+              ? ` (${(bf - prevComp.bodyFatPct) >= 0 ? '+' : ''}${(bf - prevComp.bodyFatPct).toFixed(1)}% vs ${formatDateDisplay(prevComp.date)})`
+              : '';
+            list.push({
+              tierClass: bf < 30 ? 'tier-150' : '',
+              badge: 'SURPRISE MILESTONE · BODY FAT % PROGRESS',
+              message: `Surprise body comp highlight! Your % Body Fat is ${bf}%${bfMassTxt}${deltaTxt} on ${formatDateDisplay(latestComp.date)}.`,
+              sub: `Tracked via Renpho Body Fat Percentage(%) & Body Fat Mass(lb)`
+            });
+          }
+        }
+
+        // % Muscle Mass surprise milestone
+        if (latestComp.musclePct !== null && latestComp.musclePct !== undefined) {
+          const mp = latestComp.musclePct;
+          const mpMassTxt = latestComp.muscleMass !== null && latestComp.muscleMass !== undefined ? ` (${latestComp.muscleMass} lb)` : '';
+          const roseVsPrev = prevComp && prevComp.musclePct !== null && prevComp.musclePct !== undefined && mp > prevComp.musclePct;
+          if (mp >= 63 || roseVsPrev) {
+            const deltaTxt = prevComp && prevComp.musclePct !== null && prevComp.musclePct !== undefined
+              ? ` (${(mp - prevComp.musclePct) >= 0 ? '+' : ''}${(mp - prevComp.musclePct).toFixed(1)}% vs ${formatDateDisplay(prevComp.date)})`
+              : '';
+            list.push({
+              tierClass: mp >= 68 ? 'tier-150' : '',
+              badge: 'SURPRISE MILESTONE · MUSCLE MASS %',
+              message: `Surprise muscle win! Your % Muscle Mass reached ${mp}%${mpMassTxt}${deltaTxt} on ${formatDateDisplay(latestComp.date)}—pushing closer to the outer health web!`,
+              sub: `Tracked via Renpho Muscle Percentage(%) & Muscle Mass(lb)`
+            });
+          }
+        }
+
+        // % Body Water surprise milestone
+        if (latestComp.bodyWaterPct !== null && latestComp.bodyWaterPct !== undefined) {
+          const bw = latestComp.bodyWaterPct;
+          const bwMassTxt = latestComp.bodyWaterMass !== null && latestComp.bodyWaterMass !== undefined ? ` (${latestComp.bodyWaterMass} lb)` : '';
+          const roseVsPrev = prevComp && prevComp.bodyWaterPct !== null && prevComp.bodyWaterPct !== undefined && bw > prevComp.bodyWaterPct;
+          if (bw >= 46 || roseVsPrev) {
+            const deltaTxt = prevComp && prevComp.bodyWaterPct !== null && prevComp.bodyWaterPct !== undefined
+              ? ` (${(bw - prevComp.bodyWaterPct) >= 0 ? '+' : ''}${(bw - prevComp.bodyWaterPct).toFixed(1)}% vs ${formatDateDisplay(prevComp.date)})`
+              : '';
+            list.push({
+              tierClass: bw >= 50 ? 'tier-150' : '',
+              badge: 'SURPRISE MILESTONE · BODY WATER %',
+              message: `Surprise hydration win! Your % Body Water is ${bw}%${bwMassTxt}${deltaTxt} on ${formatDateDisplay(latestComp.date)} (target zone: 50–60%).`,
+              sub: `Tracked via Renpho Body Water Percentage(%) & Body Water Mass(lb)`
+            });
+          }
+        }
       }
 
       return list;
@@ -3118,7 +3199,6 @@
               const hasComp = Object.values(rowComp).some(v => v !== null);
               if (parsedWeight === null && !hasComp) continue;
 
-              // Since Renpho exports newest-first (No. 1 = latest), keep first valid row per date unless merging missing fields
               if (!byDate.has(standardizedDate)) {
                 importedDates.add(standardizedDate);
                 byDate.set(standardizedDate, {
