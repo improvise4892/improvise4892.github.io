@@ -238,6 +238,23 @@
       box-shadow: 0 4px 14px rgba(24, 39, 33, 0.04);
     }
 
+    .spider-wrapper {
+      max-width: 420px;
+      margin: 8px auto 4px;
+      position: relative;
+    }
+
+    .spider-meta {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+      margin-top: 8px;
+      background: #f5f8f6;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+
     h3.chart-title {
       margin-bottom: 8px;
       font-size: 0.98rem;
@@ -631,6 +648,17 @@
     </div>
   </details>
 
+  <!-- Spider Web Chart: Body Composition vs. Ideal Health Perimeter -->
+  <div class="chart-container">
+    <h3 class="chart-title">Body Composition Health Web (<span id="spiderReadingLabel">Latest Renpho Reading</span>)</h3>
+    <div class="spider-wrapper">
+      <canvas id="bodyCompSpiderChart"></canvas>
+    </div>
+    <div class="spider-meta" id="spiderReadingSummary">
+      Import a Renpho CSV to plot <strong>% Body Fat</strong>, <strong>% Muscle Mass</strong>, and <strong>% Body Water</strong>. Outer ring (100%) = closer to ideal recommended health range.
+    </div>
+  </div>
+
   <!-- Two Charts: Past Month & Past Year -->
   <div class="chart-container">
     <h3 class="chart-title">Past Month View</h3>
@@ -690,10 +718,11 @@
           <tr>
             <th>Date</th>
             <th>Weight</th>
-            <th>Consumed</th>
-            <th>Burned</th>
-            <th>Proj. Change</th>
-            <th>Actual Change</th>
+            <th>Fat % / Mass</th>
+            <th>Muscle % / Mass</th>
+            <th>Water % / Mass</th>
+            <th>Consumed / Burn</th>
+            <th>Proj / Act Δ</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -726,7 +755,7 @@
 
       <label>Import Data Type:</label>
       <select id="importType">
-        <option value="renpho">Renpho Weight CSV</option>
+        <option value="renpho">Renpho Weight & Body Comp CSV</option>
         <option value="garmin">Garmin Calories CSV</option>
       </select>
 
@@ -880,7 +909,7 @@
 
     let entries = JSON.parse(localStorage.getItem('weightData')) || [];
     let ignoredFlagKeys = new Set(JSON.parse(localStorage.getItem(IGNORED_FLAGS_KEY)) || []);
-    let chartMonth, chartYear, macroPieChart = null;
+    let chartMonth, chartYear, macroPieChart = null, bodyCompSpiderChart = null;
     let videoStream = null;
     let scanningActive = false;
     let productsCache = [];
@@ -890,6 +919,191 @@
     let historyPageOffset = 0;
     let editingEntryOriginalDate = null;
     let flaggedEntriesMap = new Map();
+
+    function parseOptionalMetric(rawValue, maxVal = 1000) {
+      if (rawValue === null || rawValue === undefined) return null;
+      const cleaned = String(rawValue).trim().replace(/^"|"$/g, '').replace(/[^0-9.\-]/g, '');
+      if (cleaned === '' || cleaned === '--' || cleaned === '-') return null;
+      const num = Number(cleaned);
+      if (!Number.isFinite(num) || num < 0 || num > maxVal) return null;
+      return Math.round(num * 10) / 10;
+    }
+
+    function normalizeBodyCompFields(src = {}) {
+      return {
+        bodyFatPct: parseOptionalMetric(src.bodyFatPct ?? src.bodyFatPercentage ?? src['Body Fat Percentage(%)'], 80),
+        bodyFatMass: parseOptionalMetric(src.bodyFatMass ?? src['Body Fat Mass(lb)'], 500),
+        musclePct: parseOptionalMetric(src.musclePct ?? src.musclePercentage ?? src['Muscle Percentage(%)'], 100),
+        muscleMass: parseOptionalMetric(src.muscleMass ?? src['Muscle Mass(lb)'], 500),
+        bodyWaterPct: parseOptionalMetric(src.bodyWaterPct ?? src.bodyWaterPercentage ?? src['Body Water Percentage(%)'], 100),
+        bodyWaterMass: parseOptionalMetric(src.bodyWaterMass ?? src['Body Water Mass(lb)'], 500)
+      };
+    }
+
+    // Perimeter (100) = closer to recommended health range
+    function scoreBodyFatProximity(bf) {
+      if (bf === null || bf === undefined || isNaN(bf)) return null;
+      if (bf >= 18 && bf <= 25) return 100;
+      if (bf < 18) return Math.max(0, Math.min(100, 100 - (18 - bf) * 3.5));
+      return Math.max(0, Math.min(100, 100 * (1 - (bf - 25) / (45 - 25))));
+    }
+
+    function scoreMusclePctProximity(mp) {
+      if (mp === null || mp === undefined || isNaN(mp)) return null;
+      return Math.max(0, Math.min(100, ((mp - 40) / (75 - 40)) * 100));
+    }
+
+    function scoreBodyWaterProximity(bw) {
+      if (bw === null || bw === undefined || isNaN(bw)) return null;
+      if (bw >= 50 && bw <= 60) return 100;
+      if (bw < 50) return Math.max(0, Math.min(100, 100 * (1 - (50 - bw) / (50 - 35))));
+      return Math.max(0, Math.min(100, 100 - (bw - 60) * 2.0));
+    }
+
+    function findTargetBodyCompEntry(selectedDate) {
+      const hasAnyComp = (e) =>
+        e && (
+          (e.bodyFatPct !== null && e.bodyFatPct !== undefined) ||
+          (e.musclePct !== null && e.musclePct !== undefined) ||
+          (e.bodyWaterPct !== null && e.bodyWaterPct !== undefined)
+        );
+
+      if (selectedDate) {
+        const exact = entries.find(e => e.date === selectedDate && hasAnyComp(e));
+        if (exact) return exact;
+      }
+
+      for (let i = entries.length - 1; i >= 0; i--) {
+        if (hasAnyComp(entries[i])) return entries[i];
+      }
+      return null;
+    }
+
+    function initBodyCompSpiderChart() {
+      const ctx = document.getElementById('bodyCompSpiderChart').getContext('2d');
+      bodyCompSpiderChart = new Chart(ctx, {
+        type: 'radar',
+        data: {
+          labels: ['% Body Fat', '% Muscle Mass', '% Body Water'],
+          datasets: [
+            {
+              label: 'Health Proximity (Outer = Ideal)',
+              data: [0, 0, 0],
+              fill: true,
+              backgroundColor: 'rgba(47, 111, 94, 0.24)',
+              borderColor: '#2f6f5e',
+              pointBackgroundColor: '#24574a',
+              pointBorderColor: '#ffffff',
+              pointRadius: 4,
+              borderWidth: 2
+            },
+            {
+              label: 'Recommended Target Perimeter',
+              data: [100, 100, 100],
+              fill: false,
+              borderColor: '#8c9e78',
+              borderDash: [5, 4],
+              pointRadius: 0,
+              borderWidth: 1.5
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            r: {
+              min: 0,
+              max: 100,
+              ticks: {
+                stepSize: 25,
+                backdropColor: 'transparent',
+                color: '#5b6862',
+                font: { size: 10 },
+                callback: (v) => v === 100 ? '100% (Ideal)' : `${v}%`
+              },
+              grid: { color: 'rgba(91, 104, 98, 0.18)' },
+              angleLines: { color: 'rgba(91, 104, 98, 0.2)' },
+              pointLabels: {
+                color: '#1f2925',
+                font: { size: 12, weight: 'bold' }
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#4c5953', boxWidth: 10, font: { size: 11 } }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  if (context.datasetIndex === 1) {
+                    return 'Perimeter = Ideal Health Reference (100%)';
+                  }
+                  const target = findTargetBodyCompEntry(document.getElementById('date').value);
+                  if (!target) return 'No Renpho data logged';
+                  if (context.dataIndex === 0) {
+                    const pct = target.bodyFatPct ?? '--';
+                    const mass = target.bodyFatMass !== null && target.bodyFatMass !== undefined ? ` (${target.bodyFatMass} lb)` : '';
+                    return `Proximity: ${context.raw.toFixed(0)}% · Body Fat: ${pct}%${mass} [Ideal: 18–25%]`;
+                  }
+                  if (context.dataIndex === 1) {
+                    const pct = target.musclePct ?? '--';
+                    const mass = target.muscleMass !== null && target.muscleMass !== undefined ? ` (${target.muscleMass} lb)` : '';
+                    return `Proximity: ${context.raw.toFixed(0)}% · Muscle: ${pct}%${mass} [Higher is closer]`;
+                  }
+                  const pct = target.bodyWaterPct ?? '--';
+                  const mass = target.bodyWaterMass !== null && target.bodyWaterMass !== undefined ? ` (${target.bodyWaterMass} lb)` : '';
+                  return `Proximity: ${context.raw.toFixed(0)}% · Body Water: ${pct}%${mass} [Ideal: 50–60%]`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function updateBodyCompSpiderChart(selectedDate) {
+      const labelEl = document.getElementById('spiderReadingLabel');
+      const summaryEl = document.getElementById('spiderReadingSummary');
+      if (!bodyCompSpiderChart || !labelEl || !summaryEl) return;
+
+      const target = findTargetBodyCompEntry(selectedDate);
+      if (!target) {
+        labelEl.innerText = 'No Renpho Data';
+        bodyCompSpiderChart.data.datasets[0].data = [0, 0, 0];
+        bodyCompSpiderChart.update();
+        summaryEl.innerHTML = 'Import a Renpho CSV to plot <strong>% Body Fat</strong>, <strong>% Muscle Mass</strong>, and <strong>% Body Water</strong>. Outer ring (100%) = closer to ideal recommended health range.';
+        return;
+      }
+
+      const bfScore = scoreBodyFatProximity(target.bodyFatPct) ?? 0;
+      const mpScore = scoreMusclePctProximity(target.musclePct) ?? 0;
+      const bwScore = scoreBodyWaterProximity(target.bodyWaterPct) ?? 0;
+
+      labelEl.innerText = `${formatDateDisplay(target.date)}`;
+      bodyCompSpiderChart.data.datasets[0].data = [
+        Math.round(bfScore * 10) / 10,
+        Math.round(mpScore * 10) / 10,
+        Math.round(bwScore * 10) / 10
+      ];
+      bodyCompSpiderChart.update();
+
+      const bfText = target.bodyFatPct !== null && target.bodyFatPct !== undefined
+        ? `${target.bodyFatPct}%${target.bodyFatMass !== null && target.bodyFatMass !== undefined ? ` (${target.bodyFatMass} lb)` : ''}`
+        : '--';
+      const mpText = target.musclePct !== null && target.musclePct !== undefined
+        ? `${target.musclePct}%${target.muscleMass !== null && target.muscleMass !== undefined ? ` (${target.muscleMass} lb)` : ''}`
+        : '--';
+      const bwText = target.bodyWaterPct !== null && target.bodyWaterPct !== undefined
+        ? `${target.bodyWaterPct}%${target.bodyWaterMass !== null && target.bodyWaterMass !== undefined ? ` (${target.bodyWaterMass} lb)` : ''}`
+        : '--';
+
+      summaryEl.innerHTML = `<strong>${formatDateDisplay(target.date)}</strong> · ` +
+        `Body Fat: <b>${bfText}</b> (${bfScore.toFixed(0)}% to ideal) · ` +
+        `Muscle: <b>${mpText}</b> (${mpScore.toFixed(0)}% scale) · ` +
+        `Body Water: <b>${bwText}</b> (${bwScore.toFixed(0)}% to ideal)`;
+    }
 
     function getFlagSignature(entry) {
       if (!entry) return '';
@@ -1097,11 +1311,13 @@
     function downloadBackupJson() {
       const normalizedEntries = entries.map((entry) => {
         const items = normalizeFoodItemsArray(entry.items);
+        const comp = normalizeBodyCompFields(entry);
         return {
           date: entry.date,
           weight: entry.weight !== null && entry.weight !== undefined ? entry.weight : null,
           calories: items.length > 0 ? items.reduce((s, x) => s + x.calories, 0) : (parseStrictNonNegativeNumber(entry.calories) || 0),
           caloriesBurned: entry.caloriesBurned ?? 2000,
+          ...comp,
           items
         };
       });
@@ -1231,6 +1447,7 @@
                 const wCheck = validateWeightInput(row.weight, false);
                 const bCheck = validateCaloriesBurnedInput(row.caloriesBurned, true);
                 const items = normalizeFoodItemsArray(row.items);
+                const comp = normalizeBodyCompFields(row);
                 totalFoodItemsRestored += items.length;
                 const consumed = items.length > 0
                   ? items.reduce((s, x) => s + x.calories, 0)
@@ -1240,6 +1457,7 @@
                   weight: wCheck.ok ? wCheck.value : null,
                   calories: consumed,
                   caloriesBurned: bCheck.ok ? bCheck.value : 2000,
+                  ...comp,
                   items
                 };
               })
@@ -1279,6 +1497,7 @@
                 weight: wCheck.ok ? wCheck.value : null,
                 calories: items.length > 0 ? items.reduce((s, x) => s + x.calories, 0) : cVal,
                 caloriesBurned: bCheck.ok ? bCheck.value : 2000,
+                ...normalizeBodyCompFields({}),
                 items
               });
             }
@@ -1882,6 +2101,7 @@
 
       chartMonth = new Chart(document.getElementById('chartMonth').getContext('2d'), createConfig());
       chartYear = new Chart(document.getElementById('chartYear').getContext('2d'), createConfig());
+      initBodyCompSpiderChart();
     }
 
     function clearAllData() {
@@ -1954,7 +2174,7 @@
 
       let existing = entries.find(e => e.date === date);
       if (!existing) {
-        existing = { date, weight: null, calories: 2200, caloriesBurned: 2000, items: [] };
+        existing = { date, weight: null, calories: 2200, caloriesBurned: 2000, ...normalizeBodyCompFields({}), items: [] };
         entries.push(existing);
       }
 
@@ -2029,6 +2249,7 @@
           weight: origEntry ? origEntry.weight : null,
           calories: origEntry ? (origEntry.calories || 0) : 2200,
           caloriesBurned: origEntry ? (origEntry.caloriesBurned || 2000) : 2000,
+          ...normalizeBodyCompFields(origEntry || {}),
           items: origEntry && Array.isArray(origEntry.items) ? [...origEntry.items] : []
         };
         entries.push(targetEntry);
@@ -2247,6 +2468,7 @@
             weight: null,
             calories: 0,
             caloriesBurned: 2000,
+            ...normalizeBodyCompFields({}),
             items: []
           };
           entries.push(destEntry);
@@ -2689,7 +2911,7 @@
       const date = document.getElementById('date').value;
       let existing = entries.find(e => e.date === date);
       if (!existing) {
-        existing = { date, weight: null, calories: 2200, caloriesBurned: 2000, items: [] };
+        existing = { date, weight: null, calories: 2200, caloriesBurned: 2000, ...normalizeBodyCompFields({}), items: [] };
         entries.push(existing);
       }
 
@@ -2851,17 +3073,26 @@
                   weight: prior ? prior.weight : null,
                   calories: prior ? (prior.calories || 2200) : 2200,
                   caloriesBurned: burnVal,
+                  ...normalizeBodyCompFields(prior || {}),
                   items: prior && Array.isArray(prior.items) ? [...prior.items] : []
                 });
                 addedCount++;
               });
             }
           } else {
-            let dateIdx = headers.findIndex(h => h.includes('date') || h.includes('time'));
-            let weightIdx = headers.findIndex(h => h.includes('weight'));
+            const findCol = (predicate) => headers.findIndex(predicate);
+            let dateIdx = findCol(h => h === 'date' || h.includes('date') || h.includes('time'));
+            let weightIdx = findCol(h => h.includes('weight(lb)') || (h.includes('weight') && !h.includes('target') && !h.includes('optimal') && !h.includes('level')));
 
-            if (dateIdx === -1) dateIdx = 0;
-            if (weightIdx === -1) weightIdx = 1;
+            const bfPctIdx = findCol(h => h.includes('body fat percentage') || h === 'body fat(%)');
+            const bfMassIdx = findCol(h => h.includes('body fat mass') && !h.includes('target'));
+            const musclePctIdx = findCol(h => (h === 'muscle percentage(%)' || h.startsWith('muscle percentage')) && !h.includes('skeletal'));
+            const muscleMassIdx = findCol(h => (h === 'muscle mass(lb)' || h.startsWith('muscle mass')) && !h.includes('skeletal') && !h.includes('target'));
+            const waterPctIdx = findCol(h => h.includes('body water percentage') || h.includes('water percentage'));
+            const waterMassIdx = findCol(h => h.includes('body water mass') || h.includes('water mass'));
+
+            if (dateIdx === -1) dateIdx = 1;
+            if (weightIdx === -1) weightIdx = 3;
 
             const byDate = new Map();
             for (let i = 1; i < lines.length; i++) {
@@ -2869,12 +3100,39 @@
               if (cols.length <= Math.max(dateIdx, weightIdx)) continue;
 
               const standardizedDate = parseDateOnly(cols[dateIdx]);
+              if (!standardizedDate) continue;
+
               const rawWeight = cols[weightIdx].replace(/[^0-9.]/g, '');
               const wCheck = validateWeightInput(rawWeight, true);
+              const parsedWeight = wCheck.ok && wCheck.value !== null ? wCheck.value : null;
 
-              if (standardizedDate && wCheck.ok && wCheck.value !== null) {
+              const rowComp = {
+                bodyFatPct: bfPctIdx >= 0 ? parseOptionalMetric(cols[bfPctIdx], 80) : null,
+                bodyFatMass: bfMassIdx >= 0 ? parseOptionalMetric(cols[bfMassIdx], 500) : null,
+                musclePct: musclePctIdx >= 0 ? parseOptionalMetric(cols[musclePctIdx], 100) : null,
+                muscleMass: muscleMassIdx >= 0 ? parseOptionalMetric(cols[muscleMassIdx], 500) : null,
+                bodyWaterPct: waterPctIdx >= 0 ? parseOptionalMetric(cols[waterPctIdx], 100) : null,
+                bodyWaterMass: waterMassIdx >= 0 ? parseOptionalMetric(cols[waterMassIdx], 500) : null
+              };
+
+              const hasComp = Object.values(rowComp).some(v => v !== null);
+              if (parsedWeight === null && !hasComp) continue;
+
+              // Since Renpho exports newest-first (No. 1 = latest), keep first valid row per date unless merging missing fields
+              if (!byDate.has(standardizedDate)) {
                 importedDates.add(standardizedDate);
-                byDate.set(standardizedDate, wCheck.value);
+                byDate.set(standardizedDate, {
+                  weight: parsedWeight,
+                  ...rowComp
+                });
+              } else {
+                const existingDay = byDate.get(standardizedDate);
+                if (existingDay.weight === null && parsedWeight !== null) existingDay.weight = parsedWeight;
+                Object.keys(rowComp).forEach((k) => {
+                  if (existingDay[k] === null && rowComp[k] !== null) {
+                    existingDay[k] = rowComp[k];
+                  }
+                });
               }
             }
 
@@ -2887,13 +3145,20 @@
               });
 
               entries = entries.filter(e => !importedDates.has(e.date));
-              byDate.forEach((wVal, dKey) => {
+              byDate.forEach((renphoRow, dKey) => {
                 const prior = preservedByDate.get(dKey);
+                const priorComp = normalizeBodyCompFields(prior || {});
                 entries.push({
                   date: dKey,
-                  weight: wVal,
+                  weight: renphoRow.weight !== null ? renphoRow.weight : (prior ? prior.weight : null),
                   calories: prior ? (prior.calories || 2200) : 2200,
                   caloriesBurned: prior ? (prior.caloriesBurned || 2000) : 2000,
+                  bodyFatPct: renphoRow.bodyFatPct ?? priorComp.bodyFatPct,
+                  bodyFatMass: renphoRow.bodyFatMass ?? priorComp.bodyFatMass,
+                  musclePct: renphoRow.musclePct ?? priorComp.musclePct,
+                  muscleMass: renphoRow.muscleMass ?? priorComp.muscleMass,
+                  bodyWaterPct: renphoRow.bodyWaterPct ?? priorComp.bodyWaterPct,
+                  bodyWaterMass: renphoRow.bodyWaterMass ?? priorComp.bodyWaterMass,
                   items: prior && Array.isArray(prior.items) ? [...prior.items] : []
                 });
                 addedCount++;
@@ -2949,6 +3214,15 @@
       return map;
     }
 
+    function formatPctMassCell(pct, mass) {
+      const hasPct = pct !== null && pct !== undefined && !isNaN(pct);
+      const hasMass = mass !== null && mass !== undefined && !isNaN(mass);
+      if (!hasPct && !hasMass) return '--';
+      if (hasPct && hasMass) return `${pct}% / ${mass} lb`;
+      if (hasPct) return `${pct}%`;
+      return `${mass} lb`;
+    }
+
     function renderAll() {
       sortEntries();
       renderDailyQuote();
@@ -2980,7 +3254,7 @@
       const totalEntries = entries.length;
       if (totalEntries === 0) {
         historyPageOffset = 0;
-        historyTableHtml = `<tr><td colspan="7" style="color: var(--muted);"><i>No history entries logged yet.</i></td></tr>`;
+        historyTableHtml = `<tr><td colspan="8" style="color: var(--muted);"><i>No history entries logged yet.</i></td></tr>`;
         document.getElementById('historyRangeLabel').innerText = 'No entries yet';
         document.getElementById('newerHistoryBtn').disabled = true;
         document.getElementById('olderHistoryBtn').disabled = true;
@@ -3026,13 +3300,18 @@
             ? `<button class="delete-btn" onclick="deleteEntry(${idx})">${isFlagged ? 'Del (Flagged)' : 'Delete'}</button>`
             : '';
 
+          const fatCell = formatPctMassCell(entry.bodyFatPct, entry.bodyFatMass);
+          const muscleCell = formatPctMassCell(entry.musclePct, entry.muscleMass);
+          const waterCell = formatPctMassCell(entry.bodyWaterPct, entry.bodyWaterMass);
+
           historyTableHtml += `<tr>
             <td>${formatDateDisplay(entry.date)}</td>
             <td>${entry.weight !== null ? entry.weight : '--'}</td>
-            <td>${entry.calories}</td>
-            <td>${entry.caloriesBurned}</td>
-            <td style="color: ${projColor}">${projStr}</td>
-            <td style="font-weight: bold;">${actualStr}</td>
+            <td>${fatCell}</td>
+            <td>${muscleCell}</td>
+            <td>${waterCell}</td>
+            <td>${entry.calories} / ${entry.caloriesBurned}</td>
+            <td><span style="color: ${projColor}">${projStr}</span><br><span style="font-weight: bold;">${actualStr}</span></td>
             <td>
               <button class="edit-btn" onclick="editEntry(${idx})">Edit</button>
               ${deleteBtnHtml}
@@ -3077,6 +3356,7 @@
       document.getElementById('todayFoodTableBody').innerHTML = todayFoodTableHtml;
 
       updateMacroPieChart(todayTotalP, todayTotalF, todayTotalC);
+      updateBodyCompSpiderChart(selectedDate);
 
       function updateChartWithChainedProjections(chartInstance, filteredEntries) {
         let labels = [];
