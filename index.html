@@ -240,10 +240,12 @@
 
     .spider-card {
       margin-top: 14px;
-      background: rgba(255, 255, 255, 0.9);
-      padding: 12px 14px;
-      border-radius: 10px;
+      background: var(--surface);
+      backdrop-filter: blur(6px);
+      padding: 14px 16px;
+      border-radius: 12px;
       border: 1px solid var(--border);
+      box-shadow: 0 4px 14px rgba(24, 39, 33, 0.04);
     }
 
     .spider-legend-strip {
@@ -752,7 +754,7 @@
     <canvas id="chartYear"></canvas>
   </div>
 
-  <!-- Collapsible Section 1: Selected Day Food Log, Macro Pie Chart & Body Comp Spider Chart -->
+  <!-- Collapsible Food Log & Macros for Selected Day -->
   <details open>
     <summary>Food Log & Macros for: <span id="currentDateHeader">--</span></summary>
     <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;">
@@ -766,26 +768,6 @@
       <!-- Macro Pie Chart Container -->
       <div style="max-width: 175px; margin: 12px auto; position: relative;">
         <canvas id="macroPieChart"></canvas>
-      </div>
-
-      <!-- Spider Web Chart right after Macros Pie Chart -->
-      <div class="spider-card">
-        <h3 class="chart-title" style="text-align:center;">Body Composition Range Web (<span id="spiderReadingLabel">Latest Renpho Reading</span>)</h3>
-        <div class="spider-legend-strip">
-          <span class="spider-legend-item"><span class="spider-swatch" style="background:#2ea85c;"></span>Ideal / Average</span>
-          <span class="spider-legend-item"><span class="spider-swatch" style="background:#74c994;"></span>Acceptable / Near Ideal</span>
-          <span class="spider-legend-item"><span class="spider-swatch" style="background:#4694d1;"></span>Low / Below Avg.</span>
-          <span class="spider-legend-item"><span class="spider-swatch" style="background:#e3685e;"></span>Over / Outside Target</span>
-        </div>
-        <div class="spider-wrapper">
-          <canvas id="bodyCompSpiderChart"></canvas>
-        </div>
-        <div class="spider-metric-grid" id="spiderMetricCards">
-          <div class="spider-metric-box">Import a Renpho CSV to view range bands and boundaries.</div>
-        </div>
-        <div class="spider-meta" id="spiderReadingSummary">
-          Each spoke has its own color-coded corridor centered right on the spoke: <strong>Green</strong> = Ideal / Average, <strong>Blue</strong> = Low / Below Avg., <strong>Red/Coral</strong> = Over / Outside Target.
-        </div>
       </div>
 
       <table>
@@ -803,7 +785,27 @@
     </div>
   </details>
 
-  <!-- Collapsible Section 2: Weight & Calorie History Log -->
+  <!-- Body Composition Spider Chart & Associated Data (placed right after Food Log, before Weight & History Log) -->
+  <div class="spider-card">
+    <h3 class="chart-title" style="text-align:center;">Body Composition Range Web (<span id="spiderReadingLabel">Latest Renpho Reading</span>)</h3>
+    <div class="spider-legend-strip">
+      <span class="spider-legend-item"><span class="spider-swatch" style="background:#2ea85c;"></span>Ideal / Average</span>
+      <span class="spider-legend-item"><span class="spider-swatch" style="background:#74c994;"></span>Acceptable / Near Ideal</span>
+      <span class="spider-legend-item"><span class="spider-swatch" style="background:#4694d1;"></span>Low / Below Avg.</span>
+      <span class="spider-legend-item"><span class="spider-swatch" style="background:#e3685e;"></span>Over / Outside Target</span>
+    </div>
+    <div class="spider-wrapper">
+      <canvas id="bodyCompSpiderChart"></canvas>
+    </div>
+    <div class="spider-metric-grid" id="spiderMetricCards">
+      <div class="spider-metric-box">Import a Renpho CSV to view range bands and boundaries.</div>
+    </div>
+    <div class="spider-meta" id="spiderReadingSummary">
+      Each spoke's ±60° sector is color-coded from the center out to each boundary: <strong>Green</strong> = Ideal / Average, <strong>Blue</strong> = Low / Below Avg., <strong>Red/Coral</strong> = Over / Outside Target.
+    </div>
+  </div>
+
+  <!-- Collapsible Weight & Calorie History Log -->
   <details open>
     <summary>Weight & History Log (10 Entries Per Page)</summary>
     <div style="margin-top: 10px;">
@@ -1030,11 +1032,11 @@
         shortLabel: 'Body Fat %',
         rangeNote: 'Low <14% · Below Avg 14–21% · Ideal 21–25% · Acceptable 25–32% · Over >32%',
         segments: [
-          { fromVal: 0,  toVal: 14, fromR: 0,  toR: 22,  color: 'rgba(70, 148, 209, 0.34)',  status: 'Low',        isIdeal: false, pillClass: 'zone-low' },
-          { fromVal: 14, toVal: 21, fromR: 22, toR: 46,  color: 'rgba(70, 148, 209, 0.22)',  status: 'Below Avg.', isIdeal: false, pillClass: 'zone-low' },
-          { fromVal: 21, toVal: 25, fromR: 46, toR: 68,  color: 'rgba(46, 168, 92, 0.42)',   status: 'Ideal',      isIdeal: true,  pillClass: 'zone-ideal' },
-          { fromVal: 25, toVal: 32, fromR: 68, toR: 86,  color: 'rgba(116, 201, 148, 0.30)', status: 'Acceptable', isIdeal: false, pillClass: 'zone-acceptable' },
-          { fromVal: 32, toVal: 42, fromR: 86, toR: 100, color: 'rgba(227, 104, 94, 0.38)',  status: 'Over',       isIdeal: false, pillClass: 'zone-over' }
+          { fromVal: 0,  toVal: 14, fromR: 0,  toR: 22,  color: 'rgba(70, 148, 209, 0.30)',  status: 'Low',        isIdeal: false, pillClass: 'zone-low' },
+          { fromVal: 14, toVal: 21, fromR: 22, toR: 46,  color: 'rgba(70, 148, 209, 0.20)',  status: 'Below Avg.', isIdeal: false, pillClass: 'zone-low' },
+          { fromVal: 21, toVal: 25, fromR: 46, toR: 68,  color: 'rgba(46, 168, 92, 0.36)',   status: 'Ideal',      isIdeal: true,  pillClass: 'zone-ideal' },
+          { fromVal: 25, toVal: 32, fromR: 68, toR: 86,  color: 'rgba(116, 201, 148, 0.28)', status: 'Acceptable', isIdeal: false, pillClass: 'zone-acceptable' },
+          { fromVal: 32, toVal: 42, fromR: 86, toR: 100, color: 'rgba(227, 104, 94, 0.34)',  status: 'Over',       isIdeal: false, pillClass: 'zone-over' }
         ],
         markers: [
           { val: 14, r: 22, text: '14%' },
@@ -1050,10 +1052,10 @@
         shortLabel: 'Muscle %',
         rangeNote: 'Low <45% · Below Avg 45–60% · Ideal 60–72% · High/Optimal 72–80%',
         segments: [
-          { fromVal: 30, toVal: 45, fromR: 0,  toR: 24,  color: 'rgba(227, 104, 94, 0.36)',  status: 'Low',        isIdeal: false, pillClass: 'zone-over' },
-          { fromVal: 45, toVal: 60, fromR: 24, toR: 54,  color: 'rgba(70, 148, 209, 0.30)',  status: 'Below Avg.', isIdeal: false, pillClass: 'zone-low' },
-          { fromVal: 60, toVal: 72, fromR: 54, toR: 82,  color: 'rgba(46, 168, 92, 0.42)',   status: 'Ideal',      isIdeal: true,  pillClass: 'zone-ideal' },
-          { fromVal: 72, toVal: 80, fromR: 82, toR: 100, color: 'rgba(116, 201, 148, 0.34)', status: 'Optimal',    isIdeal: true,  pillClass: 'zone-acceptable' }
+          { fromVal: 30, toVal: 45, fromR: 0,  toR: 24,  color: 'rgba(227, 104, 94, 0.32)',  status: 'Low',        isIdeal: false, pillClass: 'zone-over' },
+          { fromVal: 45, toVal: 60, fromR: 24, toR: 54,  color: 'rgba(70, 148, 209, 0.26)',  status: 'Below Avg.', isIdeal: false, pillClass: 'zone-low' },
+          { fromVal: 60, toVal: 72, fromR: 54, toR: 82,  color: 'rgba(46, 168, 92, 0.36)',   status: 'Ideal',      isIdeal: true,  pillClass: 'zone-ideal' },
+          { fromVal: 72, toVal: 80, fromR: 82, toR: 100, color: 'rgba(116, 201, 148, 0.30)', status: 'Optimal',    isIdeal: true,  pillClass: 'zone-acceptable' }
         ],
         markers: [
           { val: 45, r: 24, text: '45%' },
@@ -1068,11 +1070,11 @@
         shortLabel: 'Body Water %',
         rangeNote: 'Low <45% · Below Avg 45–50% · Ideal 50–60% · Acceptable 60–65% · High >65%',
         segments: [
-          { fromVal: 35, toVal: 45, fromR: 0,  toR: 22,  color: 'rgba(227, 104, 94, 0.36)',  status: 'Low',        isIdeal: false, pillClass: 'zone-over' },
-          { fromVal: 45, toVal: 50, fromR: 22, toR: 45,  color: 'rgba(70, 148, 209, 0.30)',  status: 'Below Avg.', isIdeal: false, pillClass: 'zone-low' },
-          { fromVal: 50, toVal: 60, fromR: 45, toR: 74,  color: 'rgba(46, 168, 92, 0.42)',   status: 'Ideal',      isIdeal: true,  pillClass: 'zone-ideal' },
-          { fromVal: 60, toVal: 65, fromR: 74, toR: 88,  color: 'rgba(116, 201, 148, 0.32)', status: 'Acceptable', isIdeal: false, pillClass: 'zone-acceptable' },
-          { fromVal: 65, toVal: 72, fromR: 88, toR: 100, color: 'rgba(70, 148, 209, 0.30)',  status: 'High',       isIdeal: false, pillClass: 'zone-low' }
+          { fromVal: 35, toVal: 45, fromR: 0,  toR: 22,  color: 'rgba(227, 104, 94, 0.32)',  status: 'Low',        isIdeal: false, pillClass: 'zone-over' },
+          { fromVal: 45, toVal: 50, fromR: 22, toR: 45,  color: 'rgba(70, 148, 209, 0.26)',  status: 'Below Avg.', isIdeal: false, pillClass: 'zone-low' },
+          { fromVal: 50, toVal: 60, fromR: 45, toR: 74,  color: 'rgba(46, 168, 92, 0.36)',   status: 'Ideal',      isIdeal: true,  pillClass: 'zone-ideal' },
+          { fromVal: 60, toVal: 65, fromR: 74, toR: 88,  color: 'rgba(116, 201, 148, 0.28)', status: 'Acceptable', isIdeal: false, pillClass: 'zone-acceptable' },
+          { fromVal: 65, toVal: 72, fromR: 88, toR: 100, color: 'rgba(70, 148, 209, 0.26)',  status: 'High',       isIdeal: false, pillClass: 'zone-low' }
         ],
         markers: [
           { val: 45, r: 22, text: '45%' },
@@ -1106,8 +1108,8 @@
       return { radius: 0, status: 'No Data', isIdeal: false, pillClass: 'zone-low' };
     }
 
-    // Uses scale.getPointPosition(i, r) to get exact canvas coordinates along each spoke
-    // so the colored band & tick markers sit directly on top of spoke i.
+    // Draws a full ±60° wedge centered on each spoke's exact angle from the center out to each boundary.
+    // For a 3-spoke chart, three 120° sectors tile the entire triangle cleanly.
     const spiderZoneScalePlugin = {
       id: 'spiderZoneScalePlugin',
       beforeDatasetsDraw(chart) {
@@ -1117,32 +1119,34 @@
         const ctx = chart.ctx;
         const cx = scale.xCenter;
         const cy = scale.yCenter;
-        const halfWidthPx = 11; // 22px wide band centered right on each spoke
+        const maxPx = Math.hypot(
+          scale.getPointPosition(0, 100).x - cx,
+          scale.getPointPosition(0, 100).y - cy
+        );
+        if (maxPx < 1) return;
+
+        const halfSectorRad = Math.PI / 3; // 60 degrees each side = 120° total per spoke
 
         ctx.save();
         for (let i = 0; i < SPIDER_AXES.length; i++) {
           const axis = SPIDER_AXES[i];
           const tipPt = scale.getPointPosition(i, 100);
-          const dx = tipPt.x - cx;
-          const dy = tipPt.y - cy;
-          const len = Math.hypot(dx, dy);
-          if (len < 1) continue;
-
-          // Unit vector along spoke and perpendicular unit vector
-          const ux = dx / len;
-          const uy = dy / len;
-          const px = -uy;
-          const py = ux;
+          const spokeAngle = Math.atan2(tipPt.y - cy, tipPt.x - cx);
+          const startAngle = spokeAngle - halfSectorRad;
+          const endAngle = spokeAngle + halfSectorRad;
 
           axis.segments.forEach((seg) => {
-            const pInner = scale.getPointPosition(i, seg.fromR);
-            const pOuter = scale.getPointPosition(i, seg.toR);
+            const rInner = (seg.fromR / 100) * maxPx;
+            const rOuter = (seg.toR / 100) * maxPx;
 
             ctx.beginPath();
-            ctx.moveTo(pInner.x + px * halfWidthPx, pInner.y + py * halfWidthPx);
-            ctx.lineTo(pOuter.x + px * halfWidthPx, pOuter.y + py * halfWidthPx);
-            ctx.lineTo(pOuter.x - px * halfWidthPx, pOuter.y - py * halfWidthPx);
-            ctx.lineTo(pInner.x - px * halfWidthPx, pInner.y - py * halfWidthPx);
+            if (rInner <= 0.5) {
+              ctx.moveTo(cx, cy);
+              ctx.arc(cx, cy, rOuter, startAngle, endAngle, false);
+            } else {
+              ctx.arc(cx, cy, rOuter, startAngle, endAngle, false);
+              ctx.arc(cx, cy, rInner, endAngle, startAngle, true);
+            }
             ctx.closePath();
             ctx.fillStyle = seg.color;
             ctx.fill();
@@ -1315,7 +1319,7 @@
         bodyCompSpiderChart.data.datasets[0].backgroundColor = 'rgba(100, 116, 110, 0.14)';
         bodyCompSpiderChart.update();
         cardsEl.innerHTML = `<div class="spider-metric-box">Import a Renpho CSV to see each metric's actual %, zone status, and boundary range.</div>`;
-        summaryEl.innerHTML = 'Each spoke has its own color-coded corridor centered right on the spoke: <strong>Green</strong> = Ideal / Average, <strong>Blue</strong> = Low / Below Avg., <strong>Red/Coral</strong> = Over / Outside Target.';
+        summaryEl.innerHTML = `Each spoke's ±60° sector is color-coded from the center out to each boundary: <strong>Green</strong> = Ideal / Average, <strong>Blue</strong> = Low / Below Avg., <strong>Red/Coral</strong> = Over / Outside Target.`;
         return;
       }
 
@@ -1364,7 +1368,7 @@
 
       labelEl.innerText = formatDateDisplay(target.date);
       cardsEl.innerHTML = cardsHtml;
-      summaryEl.innerHTML = `<strong>${formatDateDisplay(target.date)}</strong>: <b>${idealCount} of ${SPIDER_AXES.length}</b> metrics currently sit inside the green <strong>Ideal</strong> band right on their spoke. Hover any point for exact readings and zone status.`;
+      summaryEl.innerHTML = `<strong>${formatDateDisplay(target.date)}</strong>: <b>${idealCount} of ${SPIDER_AXES.length}</b> metrics currently sit inside the green <strong>Ideal</strong> sector along their spoke. Hover any point for exact readings and zone status.`;
     }
 
     function getFlagSignature(entry) {
