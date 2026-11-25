@@ -784,7 +784,7 @@
           <div class="spider-metric-box">Import a Renpho CSV to view range bands and boundaries.</div>
         </div>
         <div class="spider-meta" id="spiderReadingSummary">
-          Each spoke has its own color-coded corridor: <strong>Green</strong> = Ideal / Average, <strong>Blue</strong> = Low / Below Avg., <strong>Red/Coral</strong> = Over / Outside Target.
+          Each spoke has its own color-coded corridor centered right on the spoke: <strong>Green</strong> = Ideal / Average, <strong>Blue</strong> = Low / Below Avg., <strong>Red/Coral</strong> = Over / Outside Target.
         </div>
       </div>
 
@@ -1022,8 +1022,6 @@
     let editingEntryOriginalDate = null;
     let flaggedEntriesMap = new Map();
 
-    // Each spoke has its own color-coded segments from inner (r=0) to outer (r=100)
-    // drawn directly as a corridor centered on that spoke's angle.
     const SPIDER_AXES = [
       {
         key: 'bodyFatPct',
@@ -1032,11 +1030,11 @@
         shortLabel: 'Body Fat %',
         rangeNote: 'Low <14% · Below Avg 14–21% · Ideal 21–25% · Acceptable 25–32% · Over >32%',
         segments: [
-          { fromVal: 0,  toVal: 14, fromR: 0,  toR: 22,  color: 'rgba(70, 148, 209, 0.30)',  status: 'Low',        isIdeal: false, pillClass: 'zone-low' },
-          { fromVal: 14, toVal: 21, fromR: 22, toR: 46,  color: 'rgba(70, 148, 209, 0.20)',  status: 'Below Avg.', isIdeal: false, pillClass: 'zone-low' },
-          { fromVal: 21, toVal: 25, fromR: 46, toR: 68,  color: 'rgba(46, 168, 92, 0.38)',   status: 'Ideal',      isIdeal: true,  pillClass: 'zone-ideal' },
-          { fromVal: 25, toVal: 32, fromR: 68, toR: 86,  color: 'rgba(116, 201, 148, 0.26)', status: 'Acceptable', isIdeal: false, pillClass: 'zone-acceptable' },
-          { fromVal: 32, toVal: 42, fromR: 86, toR: 100, color: 'rgba(227, 104, 94, 0.35)',  status: 'Over',       isIdeal: false, pillClass: 'zone-over' }
+          { fromVal: 0,  toVal: 14, fromR: 0,  toR: 22,  color: 'rgba(70, 148, 209, 0.34)',  status: 'Low',        isIdeal: false, pillClass: 'zone-low' },
+          { fromVal: 14, toVal: 21, fromR: 22, toR: 46,  color: 'rgba(70, 148, 209, 0.22)',  status: 'Below Avg.', isIdeal: false, pillClass: 'zone-low' },
+          { fromVal: 21, toVal: 25, fromR: 46, toR: 68,  color: 'rgba(46, 168, 92, 0.42)',   status: 'Ideal',      isIdeal: true,  pillClass: 'zone-ideal' },
+          { fromVal: 25, toVal: 32, fromR: 68, toR: 86,  color: 'rgba(116, 201, 148, 0.30)', status: 'Acceptable', isIdeal: false, pillClass: 'zone-acceptable' },
+          { fromVal: 32, toVal: 42, fromR: 86, toR: 100, color: 'rgba(227, 104, 94, 0.38)',  status: 'Over',       isIdeal: false, pillClass: 'zone-over' }
         ],
         markers: [
           { val: 14, r: 22, text: '14%' },
@@ -1052,10 +1050,10 @@
         shortLabel: 'Muscle %',
         rangeNote: 'Low <45% · Below Avg 45–60% · Ideal 60–72% · High/Optimal 72–80%',
         segments: [
-          { fromVal: 30, toVal: 45, fromR: 0,  toR: 24,  color: 'rgba(227, 104, 94, 0.32)',  status: 'Low',        isIdeal: false, pillClass: 'zone-over' },
-          { fromVal: 45, toVal: 60, fromR: 24, toR: 54,  color: 'rgba(70, 148, 209, 0.26)',  status: 'Below Avg.', isIdeal: false, pillClass: 'zone-low' },
-          { fromVal: 60, toVal: 72, fromR: 54, toR: 82,  color: 'rgba(46, 168, 92, 0.38)',   status: 'Ideal',      isIdeal: true,  pillClass: 'zone-ideal' },
-          { fromVal: 72, toVal: 80, fromR: 82, toR: 100, color: 'rgba(116, 201, 148, 0.30)', status: 'Optimal',    isIdeal: true,  pillClass: 'zone-acceptable' }
+          { fromVal: 30, toVal: 45, fromR: 0,  toR: 24,  color: 'rgba(227, 104, 94, 0.36)',  status: 'Low',        isIdeal: false, pillClass: 'zone-over' },
+          { fromVal: 45, toVal: 60, fromR: 24, toR: 54,  color: 'rgba(70, 148, 209, 0.30)',  status: 'Below Avg.', isIdeal: false, pillClass: 'zone-low' },
+          { fromVal: 60, toVal: 72, fromR: 54, toR: 82,  color: 'rgba(46, 168, 92, 0.42)',   status: 'Ideal',      isIdeal: true,  pillClass: 'zone-ideal' },
+          { fromVal: 72, toVal: 80, fromR: 82, toR: 100, color: 'rgba(116, 201, 148, 0.34)', status: 'Optimal',    isIdeal: true,  pillClass: 'zone-acceptable' }
         ],
         markers: [
           { val: 45, r: 24, text: '45%' },
@@ -1070,11 +1068,11 @@
         shortLabel: 'Body Water %',
         rangeNote: 'Low <45% · Below Avg 45–50% · Ideal 50–60% · Acceptable 60–65% · High >65%',
         segments: [
-          { fromVal: 35, toVal: 45, fromR: 0,  toR: 22,  color: 'rgba(227, 104, 94, 0.32)',  status: 'Low',        isIdeal: false, pillClass: 'zone-over' },
-          { fromVal: 45, toVal: 50, fromR: 22, toR: 45,  color: 'rgba(70, 148, 209, 0.26)',  status: 'Below Avg.', isIdeal: false, pillClass: 'zone-low' },
-          { fromVal: 50, toVal: 60, fromR: 45, toR: 74,  color: 'rgba(46, 168, 92, 0.38)',   status: 'Ideal',      isIdeal: true,  pillClass: 'zone-ideal' },
-          { fromVal: 60, toVal: 65, fromR: 74, toR: 88,  color: 'rgba(116, 201, 148, 0.28)', status: 'Acceptable', isIdeal: false, pillClass: 'zone-acceptable' },
-          { fromVal: 65, toVal: 72, fromR: 88, toR: 100, color: 'rgba(70, 148, 209, 0.26)',  status: 'High',       isIdeal: false, pillClass: 'zone-low' }
+          { fromVal: 35, toVal: 45, fromR: 0,  toR: 22,  color: 'rgba(227, 104, 94, 0.36)',  status: 'Low',        isIdeal: false, pillClass: 'zone-over' },
+          { fromVal: 45, toVal: 50, fromR: 22, toR: 45,  color: 'rgba(70, 148, 209, 0.30)',  status: 'Below Avg.', isIdeal: false, pillClass: 'zone-low' },
+          { fromVal: 50, toVal: 60, fromR: 45, toR: 74,  color: 'rgba(46, 168, 92, 0.42)',   status: 'Ideal',      isIdeal: true,  pillClass: 'zone-ideal' },
+          { fromVal: 60, toVal: 65, fromR: 74, toR: 88,  color: 'rgba(116, 201, 148, 0.32)', status: 'Acceptable', isIdeal: false, pillClass: 'zone-acceptable' },
+          { fromVal: 65, toVal: 72, fromR: 88, toR: 100, color: 'rgba(70, 148, 209, 0.30)',  status: 'High',       isIdeal: false, pillClass: 'zone-low' }
         ],
         markers: [
           { val: 45, r: 22, text: '45%' },
@@ -1108,37 +1106,43 @@
       return { radius: 0, status: 'No Data', isIdeal: false, pillClass: 'zone-low' };
     }
 
-    // Draws a color-coded radial corridor centered right along each spoke axis
-    // so the background color directly beneath a spoke's dot matches that metric's zone.
+    // Uses scale.getPointPosition(i, r) to get exact canvas coordinates along each spoke
+    // so the colored band & tick markers sit directly on top of spoke i.
     const spiderZoneScalePlugin = {
       id: 'spiderZoneScalePlugin',
       beforeDatasetsDraw(chart) {
         if (chart.canvas.id !== 'bodyCompSpiderChart') return;
         const scale = chart.scales.r;
-        if (!scale) return;
+        if (!scale || typeof scale.getPointPosition !== 'function') return;
         const ctx = chart.ctx;
         const cx = scale.xCenter;
         const cy = scale.yCenter;
-        const maxRadius = scale.drawingArea;
-        const numAxes = SPIDER_AXES.length;
-        const halfCorridorRad = (24 * Math.PI) / 180; // ±24° corridor centered on each spoke
+        const halfWidthPx = 11; // 22px wide band centered right on each spoke
 
         ctx.save();
-        for (let i = 0; i < numAxes; i++) {
+        for (let i = 0; i < SPIDER_AXES.length; i++) {
           const axis = SPIDER_AXES[i];
-          const centerAngle = scale.getIndexAngle(i);
-          const aLeft = centerAngle - halfCorridorRad;
-          const aRight = centerAngle + halfCorridorRad;
+          const tipPt = scale.getPointPosition(i, 100);
+          const dx = tipPt.x - cx;
+          const dy = tipPt.y - cy;
+          const len = Math.hypot(dx, dy);
+          if (len < 1) continue;
+
+          // Unit vector along spoke and perpendicular unit vector
+          const ux = dx / len;
+          const uy = dy / len;
+          const px = -uy;
+          const py = ux;
 
           axis.segments.forEach((seg) => {
-            const rInner = (seg.fromR / 100) * maxRadius;
-            const rOuter = (seg.toR / 100) * maxRadius;
+            const pInner = scale.getPointPosition(i, seg.fromR);
+            const pOuter = scale.getPointPosition(i, seg.toR);
 
             ctx.beginPath();
-            ctx.moveTo(cx + Math.cos(aLeft) * rInner, cy + Math.sin(aLeft) * rInner);
-            ctx.lineTo(cx + Math.cos(aLeft) * rOuter, cy + Math.sin(aLeft) * rOuter);
-            ctx.lineTo(cx + Math.cos(aRight) * rOuter, cy + Math.sin(aRight) * rOuter);
-            ctx.lineTo(cx + Math.cos(aRight) * rInner, cy + Math.sin(aRight) * rInner);
+            ctx.moveTo(pInner.x + px * halfWidthPx, pInner.y + py * halfWidthPx);
+            ctx.lineTo(pOuter.x + px * halfWidthPx, pOuter.y + py * halfWidthPx);
+            ctx.lineTo(pOuter.x - px * halfWidthPx, pOuter.y - py * halfWidthPx);
+            ctx.lineTo(pInner.x - px * halfWidthPx, pInner.y - py * halfWidthPx);
             ctx.closePath();
             ctx.fillStyle = seg.color;
             ctx.fill();
@@ -1149,43 +1153,42 @@
       afterDatasetsDraw(chart) {
         if (chart.canvas.id !== 'bodyCompSpiderChart') return;
         const scale = chart.scales.r;
-        if (!scale) return;
+        if (!scale || typeof scale.getPointPosition !== 'function') return;
         const ctx = chart.ctx;
         const cx = scale.xCenter;
         const cy = scale.yCenter;
-        const maxRadius = scale.drawingArea;
-        const numAxes = SPIDER_AXES.length;
 
         ctx.save();
         ctx.font = '600 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        for (let i = 0; i < numAxes; i++) {
+        for (let i = 0; i < SPIDER_AXES.length; i++) {
           const axis = SPIDER_AXES[i];
-          const angle = scale.getIndexAngle(i);
-          const cosA = Math.cos(angle);
-          const sinA = Math.sin(angle);
-          const perpX = -sinA;
-          const perpY = cosA;
+          const tipPt = scale.getPointPosition(i, 100);
+          const dx = tipPt.x - cx;
+          const dy = tipPt.y - cy;
+          const len = Math.hypot(dx, dy);
+          if (len < 1) continue;
+
+          const perpX = -dy / len;
+          const perpY = dx / len;
 
           axis.markers.forEach((m) => {
-            const rPx = (m.r / 100) * maxRadius;
-            const px = cx + cosA * rPx;
-            const py = cy + sinA * rPx;
+            const pt = scale.getPointPosition(i, m.r);
 
             ctx.beginPath();
-            ctx.moveTo(px - perpX * 4, py - perpY * 4);
-            ctx.lineTo(px + perpX * 4, py + perpY * 4);
-            ctx.strokeStyle = 'rgba(31, 41, 37, 0.6)';
+            ctx.moveTo(pt.x - perpX * 5, pt.y - perpY * 5);
+            ctx.lineTo(pt.x + perpX * 5, pt.y + perpY * 5);
+            ctx.strokeStyle = 'rgba(31, 41, 37, 0.65)';
             ctx.lineWidth = 1.2;
             ctx.stroke();
 
-            const lx = px + perpX * 14;
-            const ly = py + perpY * 14;
+            const lx = pt.x + perpX * 16;
+            const ly = pt.y + perpY * 16;
             const labelW = ctx.measureText(m.text).width + 6;
 
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
             ctx.fillRect(lx - labelW / 2, ly - 6, labelW, 12);
             ctx.fillStyle = '#26332d';
             ctx.fillText(m.text, lx, ly);
@@ -1246,7 +1249,7 @@
               label: 'Current Reading',
               data: [0, 0, 0],
               fill: true,
-              backgroundColor: 'rgba(46, 168, 92, 0.16)',
+              backgroundColor: 'rgba(46, 168, 92, 0.14)',
               borderColor: '#1f7a44',
               pointBackgroundColor: ['#1f7a44', '#1f7a44', '#1f7a44'],
               pointBorderColor: '#ffffff',
@@ -1312,7 +1315,7 @@
         bodyCompSpiderChart.data.datasets[0].backgroundColor = 'rgba(100, 116, 110, 0.14)';
         bodyCompSpiderChart.update();
         cardsEl.innerHTML = `<div class="spider-metric-box">Import a Renpho CSV to see each metric's actual %, zone status, and boundary range.</div>`;
-        summaryEl.innerHTML = 'Each spoke has its own color-coded corridor: <strong>Green</strong> = Ideal / Average, <strong>Blue</strong> = Low / Below Avg., <strong>Red/Coral</strong> = Over / Outside Target.';
+        summaryEl.innerHTML = 'Each spoke has its own color-coded corridor centered right on the spoke: <strong>Green</strong> = Ideal / Average, <strong>Blue</strong> = Low / Below Avg., <strong>Red/Coral</strong> = Over / Outside Target.';
         return;
       }
 
@@ -1355,13 +1358,13 @@
       bodyCompSpiderChart.data.datasets[0].pointBackgroundColor = pointColors;
       bodyCompSpiderChart.data.datasets[0].borderColor = allIdeal ? '#1d7a40' : '#2f6f5e';
       bodyCompSpiderChart.data.datasets[0].backgroundColor = allIdeal
-        ? 'rgba(46, 168, 92, 0.22)'
-        : 'rgba(47, 111, 94, 0.14)';
+        ? 'rgba(46, 168, 92, 0.20)'
+        : 'rgba(47, 111, 94, 0.12)';
       bodyCompSpiderChart.update();
 
       labelEl.innerText = formatDateDisplay(target.date);
       cardsEl.innerHTML = cardsHtml;
-      summaryEl.innerHTML = `<strong>${formatDateDisplay(target.date)}</strong>: <b>${idealCount} of ${SPIDER_AXES.length}</b> metrics currently sit inside the green <strong>Ideal</strong> corridor along their spoke. Hover any point for exact readings and zone status.`;
+      summaryEl.innerHTML = `<strong>${formatDateDisplay(target.date)}</strong>: <b>${idealCount} of ${SPIDER_AXES.length}</b> metrics currently sit inside the green <strong>Ideal</strong> band right on their spoke. Hover any point for exact readings and zone status.`;
     }
 
     function getFlagSignature(entry) {
