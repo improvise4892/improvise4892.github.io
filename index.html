@@ -607,13 +607,13 @@
           </div>
         </div>
 
-        <label>Calories:</label>
-        <input type="text" inputmode="decimal" id="manualFoodCals" placeholder="e.g., 150">
+        <label>Calories (decimals or fractions allowed, e.g. 125.5 or 1/2):</label>
+        <input type="text" inputmode="decimal" id="manualFoodCals" placeholder="e.g., 150 or 125.5">
 
         <div class="row-grid" style="grid-template-columns: repeat(3, 1fr);">
-          <div><label>Protein (g):</label><input type="text" inputmode="decimal" id="manualProtein" value="0"></div>
-          <div><label>Fat (g):</label><input type="text" inputmode="decimal" id="manualFat" value="0"></div>
-          <div><label>Carbs (g):</label><input type="text" inputmode="decimal" id="manualCarbs" value="0"></div>
+          <div><label>Protein (g):</label><input type="text" inputmode="decimal" id="manualProtein" value="0" placeholder="e.g. 12.5 or 1/2"></div>
+          <div><label>Fat (g):</label><input type="text" inputmode="decimal" id="manualFat" value="0" placeholder="e.g. 4.5 or 3/4"></div>
+          <div><label>Carbs (g):</label><input type="text" inputmode="decimal" id="manualCarbs" value="0" placeholder="e.g. 22.5 or 1/2"></div>
         </div>
 
         <button class="primary-btn" style="margin-top: 6px;" onclick="addManualFoodItem()">Add Food Item to Log</button>
@@ -812,7 +812,7 @@
   <div id="portionModal">
     <div class="modal-content">
       <h3 style="margin-top:0;" id="portionFoodTitle">Adjust Portion</h3>
-      <p style="font-size: 13px; color: #666;">Database nutrition values are per 100g. Enter grams, cups, tablespoons, or a multiplier.</p>
+      <p style="font-size: 13px; color: #666;">Database nutrition values are per 100g. Enter grams, cups, tablespoons, or a multiplier (decimals & fractions supported).</p>
       <div class="api-unit-note" id="apiUnitSourceNote">API unit info: Checking product serving/measure data...</div>
 
       <label>Meal Type:</label>
@@ -851,7 +851,7 @@
       </div>
 
       <label>Fraction / Multiplier (e.g. 0.5 or 1/2):</label>
-      <input type="text" id="portionMultiplier" value="1" placeholder="e.g. 0.5" oninput="calculatePortionFromMultiplier()">
+      <input type="text" id="portionMultiplier" value="1" placeholder="e.g. 0.5 or 1/2" oninput="calculatePortionFromMultiplier()">
 
       <p style="font-size: 14px; margin-top: 10px;">
         <strong>Calculated Calories: <span id="calculatedItemCals">0</span></strong><br>
@@ -894,7 +894,7 @@
         <input type="date" id="editFoodCustomDate">
       </div>
 
-      <label>Calories:</label>
+      <label>Calories (decimals or fractions allowed):</label>
       <input type="text" inputmode="decimal" id="editFoodCals">
 
       <div class="row-grid" style="grid-template-columns: repeat(3, 1fr);">
@@ -1180,25 +1180,66 @@
         .map((it) => ({
           name: it.name.trim(),
           meal: typeof it.meal === 'string' && it.meal.trim() ? it.meal.trim() : 'Snack',
-          calories: parseStrictNonNegativeNumber(it.calories) || 0,
-          protein: parseStrictNonNegativeNumber(it.protein) || 0,
-          fat: parseStrictNonNegativeNumber(it.fat) || 0,
-          carbs: parseStrictNonNegativeNumber(it.carbs) || 0
+          calories: parseDecimalOrFraction(it.calories) ?? 0,
+          protein: parseDecimalOrFraction(it.protein) ?? 0,
+          fat: parseDecimalOrFraction(it.fat) ?? 0,
+          carbs: parseDecimalOrFraction(it.carbs) ?? 0
         }));
+    }
+
+    // Parses decimals (e.g. 0.5, 125.5), fractions (e.g. 1/2, 3/4), and mixed fractions (e.g. 1 1/2)
+    function parseDecimalOrFraction(rawValue) {
+      if (rawValue === null || rawValue === undefined) return NaN;
+      const str = String(rawValue).trim();
+      if (str === '') return NaN;
+      if (str.includes('-')) return NaN;
+
+      // Mixed number like "1 1/2"
+      const mixedMatch = str.match(/^(\d+(?:\.\d+)?)\s+(\d+)\s*\/\s*(\d+)$/);
+      if (mixedMatch) {
+        const whole = Number(mixedMatch[1]);
+        const num = Number(mixedMatch[2]);
+        const den = Number(mixedMatch[3]);
+        if (!Number.isFinite(whole) || !Number.isFinite(num) || !Number.isFinite(den) || den === 0) return NaN;
+        const val = whole + (num / den);
+        return Number.isFinite(val) && val >= 0 ? val : NaN;
+      }
+
+      // Simple fraction like "1/2" or "3/4"
+      if (str.includes('/')) {
+        const parts = str.split('/');
+        if (parts.length !== 2) return NaN;
+        const num = Number(parts[0].trim());
+        const den = Number(parts[1].trim());
+        if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0 || num < 0 || den < 0) return NaN;
+        const val = num / den;
+        return Number.isFinite(val) && val >= 0 ? val : NaN;
+      }
+
+      // Standard non-negative integer or decimal like "150" or "125.5" or ".5"
+      if (!/^(\d+(?:\.\d+)?|\.\d+)$/.test(str)) return NaN;
+      const num = Number(str);
+      return Number.isFinite(num) && num >= 0 ? num : NaN;
     }
 
     function hasNonNumericCharacters(rawValue, allowDecimal = true) {
       const str = String(rawValue ?? '').trim();
       if (str === '') return false;
-      const pattern = allowDecimal ? /^\d+(\.\d+)?$/ : /^\d+$/;
+      const pattern = allowDecimal ? /^(\d+(?:\.\d+)?|\.\d+)$/ : /^\d+$/;
       return !pattern.test(str);
+    }
+
+    function hasInvalidFoodNumber(rawValue) {
+      const str = String(rawValue ?? '').trim();
+      if (str === '') return false;
+      return isNaN(parseDecimalOrFraction(str));
     }
 
     function parseStrictNonNegativeNumber(rawValue) {
       if (rawValue === null || rawValue === undefined) return NaN;
       const str = String(rawValue).trim();
       if (str === '') return NaN;
-      if (!/^\d+(\.\d+)?$/.test(str)) return NaN;
+      if (!/^(\d+(?:\.\d+)?|\.\d+)$/.test(str)) return NaN;
       const num = Number(str);
       return Number.isFinite(num) && num >= 0 ? num : NaN;
     }
@@ -1244,12 +1285,9 @@
 
     function validateFoodCaloriesInput(rawValue) {
       const str = String(rawValue ?? '').trim();
-      if (hasNonNumericCharacters(str, true)) {
-        return { ok: false, error: `Invalid calories ("${str}"): non-numeric characters or negative signs are not allowed. Please enter a number and try again.` };
-      }
-      const num = parseStrictNonNegativeNumber(str);
+      const num = parseDecimalOrFraction(str);
       if (isNaN(num)) {
-        return { ok: false, error: `Invalid calories ("${str}"): please enter a non-negative calorie number and try again.` };
+        return { ok: false, error: `Invalid calories ("${str}"): enter a non-negative number, decimal (e.g. 125.5), or fraction (e.g. 1/2).` };
       }
       if (num > 20000) {
         return { ok: false, error: `Invalid calories ("${str}"): food calories must be 20,000 or less. Please try again.` };
@@ -1259,12 +1297,9 @@
 
     function validateMacroInput(rawValue, label) {
       const str = String(rawValue ?? '').trim();
-      if (hasNonNumericCharacters(str, true)) {
-        return { ok: false, error: `Invalid ${label} ("${str}"): non-numeric characters or negative signs are not allowed. Please enter a number and try again.` };
-      }
-      const num = parseStrictNonNegativeNumber(str);
+      const num = parseDecimalOrFraction(str);
       if (isNaN(num)) {
-        return { ok: false, error: `Invalid ${label} ("${str}"): please enter a non-negative number and try again.` };
+        return { ok: false, error: `Invalid ${label} ("${str}"): enter a non-negative number, decimal (e.g. 12.5), or fraction (e.g. 1/2).` };
       }
       if (num > 2000) {
         return { ok: false, error: `Invalid ${label} ("${str}"): ${label} must be 2,000g or less. Please try again.` };
@@ -1273,15 +1308,32 @@
     }
 
     function attachNumericInputAlertListeners() {
-      const guardedFields = [
+      const strictNumericFields = [
         { id: 'weight', label: 'Weight' },
         { id: 'caloriesBurned', label: 'Calories Burned' },
+        { id: 'gramsPerUnitInput', label: 'Grams per Unit' }
+      ];
+
+      strictNumericFields.forEach(({ id, label }) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('change', () => {
+          const val = el.value.trim();
+          if (val !== '' && hasNonNumericCharacters(val, true)) {
+            alert(`Invalid ${label} entry ("${val}"): non-numeric characters or negative signs are not allowed. Please try again.`);
+            el.value = '';
+            el.focus();
+          }
+        });
+      });
+
+      // Food fields allow decimals and fractions (e.g. 0.5, 12.5, 1/2)
+      const foodFractionFields = [
         { id: 'manualFoodCals', label: 'Calories' },
         { id: 'manualProtein', label: 'Protein' },
         { id: 'manualFat', label: 'Fat' },
         { id: 'manualCarbs', label: 'Carbs' },
         { id: 'portionUnitAmount', label: 'Portion Amount' },
-        { id: 'gramsPerUnitInput', label: 'Grams per Unit' },
         { id: 'portionGrams', label: 'Portion Grams' },
         { id: 'editFoodCals', label: 'Calories' },
         { id: 'editProtein', label: 'Protein' },
@@ -1289,13 +1341,13 @@
         { id: 'editCarbs', label: 'Carbs' }
       ];
 
-      guardedFields.forEach(({ id, label }) => {
+      foodFractionFields.forEach(({ id, label }) => {
         const el = document.getElementById(id);
         if (!el) return;
         el.addEventListener('change', () => {
           const val = el.value.trim();
-          if (val !== '' && hasNonNumericCharacters(val, true)) {
-            alert(`Invalid ${label} entry ("${val}"): non-numeric characters or negative signs are not allowed. Please try again.`);
+          if (val !== '' && hasInvalidFoodNumber(val)) {
+            alert(`Invalid ${label} entry ("${val}"): enter a non-negative number, decimal (e.g. 12.5), or fraction (e.g. 1/2).`);
             el.value = '';
             el.focus();
           }
@@ -1784,77 +1836,79 @@
         });
       }
 
-      // Surprise milestones for % Body Fat, % Muscle Mass, and % Body Water
-      const compEntries = entries.filter(e =>
-        e && (
-          (e.bodyFatPct !== null && e.bodyFatPct !== undefined && !isNaN(e.bodyFatPct)) ||
-          (e.musclePct !== null && e.musclePct !== undefined && !isNaN(e.musclePct)) ||
-          (e.bodyWaterPct !== null && e.bodyWaterPct !== undefined && !isNaN(e.bodyWaterPct))
-        )
-      );
+      // Meaningful-change surprise milestones for % Body Fat, % Muscle Mass, and % Body Water
+      // Requires a real shift (>= 0.2%) from the prior reading or crossing a meaningful milestone threshold.
+      const MIN_MEANINGFUL_PCT_CHANGE = 0.2;
 
-      if (compEntries.length > 0) {
-        const latestComp = compEntries[compEntries.length - 1];
-        const prevComp = compEntries.length > 1 ? compEntries[compEntries.length - 2] : null;
+      const bfHistory = entries.filter(e => e && e.bodyFatPct !== null && e.bodyFatPct !== undefined && !isNaN(e.bodyFatPct));
+      if (bfHistory.length > 0) {
+        const latest = bfHistory[bfHistory.length - 1];
+        const prev = bfHistory.length > 1 ? bfHistory[bfHistory.length - 2] : null;
+        const diff = prev ? (latest.bodyFatPct - prev.bodyFatPct) : 0; // negative = fat % dropped
+        const bfMassTxt = latest.bodyFatMass !== null && latest.bodyFatMass !== undefined ? ` (${latest.bodyFatMass} lb)` : '';
 
-        // % Body Fat surprise milestone
-        if (latestComp.bodyFatPct !== null && latestComp.bodyFatPct !== undefined) {
-          const bf = latestComp.bodyFatPct;
-          const bfMassTxt = latestComp.bodyFatMass !== null && latestComp.bodyFatMass !== undefined ? ` (${latestComp.bodyFatMass} lb)` : '';
-          if (bf <= 25) {
-            list.push({
-              tierClass: 'tier-140',
-              badge: 'SURPRISE MILESTONE · IDEAL BODY FAT %',
-              message: `Surprise body comp win! Your % Body Fat reached ${bf}%${bfMassTxt} on ${formatDateDisplay(latestComp.date)}, right inside the ideal 18–25% target zone!`,
-              sub: `Body Fat Percentage & Body Fat Mass from Renpho`
-            });
-          } else if (bf < 33.5) {
-            const deltaTxt = prevComp && prevComp.bodyFatPct !== null && prevComp.bodyFatPct !== undefined
-              ? ` (${(bf - prevComp.bodyFatPct) >= 0 ? '+' : ''}${(bf - prevComp.bodyFatPct).toFixed(1)}% vs ${formatDateDisplay(prevComp.date)})`
-              : '';
-            list.push({
-              tierClass: bf < 30 ? 'tier-150' : '',
-              badge: 'SURPRISE MILESTONE · BODY FAT % PROGRESS',
-              message: `Surprise body comp highlight! Your % Body Fat is ${bf}%${bfMassTxt}${deltaTxt} on ${formatDateDisplay(latestComp.date)}.`,
-              sub: `Tracked via Renpho Body Fat Percentage(%) & Body Fat Mass(lb)`
-            });
-          }
+        if (latest.bodyFatPct <= 25 && (!prev || prev.bodyFatPct > 25 || diff <= -MIN_MEANINGFUL_PCT_CHANGE)) {
+          list.push({
+            tierClass: 'tier-140',
+            badge: 'SURPRISE MILESTONE · IDEAL BODY FAT %',
+            message: `Surprise body comp win! Your % Body Fat reached ${latest.bodyFatPct}%${bfMassTxt} on ${formatDateDisplay(latest.date)}, inside the 18–25% target zone!`,
+            sub: `Body Fat Percentage & Body Fat Mass from Renpho`
+          });
+        } else if (diff <= -MIN_MEANINGFUL_PCT_CHANGE) {
+          list.push({
+            tierClass: latest.bodyFatPct < 30 ? 'tier-150' : '',
+            badge: 'SURPRISE MILESTONE · BODY FAT % DOWN',
+            message: `Surprise body comp drop! Your % Body Fat moved ${diff.toFixed(1)}% to ${latest.bodyFatPct}%${bfMassTxt} on ${formatDateDisplay(latest.date)} (down from ${prev.bodyFatPct}% on ${formatDateDisplay(prev.date)}).`,
+            sub: `Tracked via Renpho Body Fat Percentage(%) & Body Fat Mass(lb)`
+          });
         }
+      }
 
-        // % Muscle Mass surprise milestone
-        if (latestComp.musclePct !== null && latestComp.musclePct !== undefined) {
-          const mp = latestComp.musclePct;
-          const mpMassTxt = latestComp.muscleMass !== null && latestComp.muscleMass !== undefined ? ` (${latestComp.muscleMass} lb)` : '';
-          const roseVsPrev = prevComp && prevComp.musclePct !== null && prevComp.musclePct !== undefined && mp > prevComp.musclePct;
-          if (mp >= 63 || roseVsPrev) {
-            const deltaTxt = prevComp && prevComp.musclePct !== null && prevComp.musclePct !== undefined
-              ? ` (${(mp - prevComp.musclePct) >= 0 ? '+' : ''}${(mp - prevComp.musclePct).toFixed(1)}% vs ${formatDateDisplay(prevComp.date)})`
-              : '';
-            list.push({
-              tierClass: mp >= 68 ? 'tier-150' : '',
-              badge: 'SURPRISE MILESTONE · MUSCLE MASS %',
-              message: `Surprise muscle win! Your % Muscle Mass reached ${mp}%${mpMassTxt}${deltaTxt} on ${formatDateDisplay(latestComp.date)}—pushing closer to the outer health web!`,
-              sub: `Tracked via Renpho Muscle Percentage(%) & Muscle Mass(lb)`
-            });
-          }
+      const muscleHistory = entries.filter(e => e && e.musclePct !== null && e.musclePct !== undefined && !isNaN(e.musclePct));
+      if (muscleHistory.length > 0) {
+        const latest = muscleHistory[muscleHistory.length - 1];
+        const prev = muscleHistory.length > 1 ? muscleHistory[muscleHistory.length - 2] : null;
+        const diff = prev ? (latest.musclePct - prev.musclePct) : 0; // positive = muscle % increased
+        const mpMassTxt = latest.muscleMass !== null && latest.muscleMass !== undefined ? ` (${latest.muscleMass} lb)` : '';
+
+        if (diff >= MIN_MEANINGFUL_PCT_CHANGE) {
+          list.push({
+            tierClass: latest.musclePct >= 68 ? 'tier-150' : '',
+            badge: 'SURPRISE MILESTONE · MUSCLE MASS % UP',
+            message: `Surprise muscle gain! Your % Muscle Mass rose +${diff.toFixed(1)}% to ${latest.musclePct}%${mpMassTxt} on ${formatDateDisplay(latest.date)} (up from ${prev.musclePct}% on ${formatDateDisplay(prev.date)}).`,
+            sub: `Tracked via Renpho Muscle Percentage(%) & Muscle Mass(lb)`
+          });
+        } else if (!prev && latest.musclePct >= 65) {
+          list.push({
+            tierClass: '',
+            badge: 'SURPRISE MILESTONE · MUSCLE MASS %',
+            message: `Surprise muscle milestone! Your initial % Muscle Mass reading is ${latest.musclePct}%${mpMassTxt} on ${formatDateDisplay(latest.date)}.`,
+            sub: `Tracked via Renpho Muscle Percentage(%) & Muscle Mass(lb)`
+          });
         }
+      }
 
-        // % Body Water surprise milestone
-        if (latestComp.bodyWaterPct !== null && latestComp.bodyWaterPct !== undefined) {
-          const bw = latestComp.bodyWaterPct;
-          const bwMassTxt = latestComp.bodyWaterMass !== null && latestComp.bodyWaterMass !== undefined ? ` (${latestComp.bodyWaterMass} lb)` : '';
-          const roseVsPrev = prevComp && prevComp.bodyWaterPct !== null && prevComp.bodyWaterPct !== undefined && bw > prevComp.bodyWaterPct;
-          if (bw >= 46 || roseVsPrev) {
-            const deltaTxt = prevComp && prevComp.bodyWaterPct !== null && prevComp.bodyWaterPct !== undefined
-              ? ` (${(bw - prevComp.bodyWaterPct) >= 0 ? '+' : ''}${(bw - prevComp.bodyWaterPct).toFixed(1)}% vs ${formatDateDisplay(prevComp.date)})`
-              : '';
-            list.push({
-              tierClass: bw >= 50 ? 'tier-150' : '',
-              badge: 'SURPRISE MILESTONE · BODY WATER %',
-              message: `Surprise hydration win! Your % Body Water is ${bw}%${bwMassTxt}${deltaTxt} on ${formatDateDisplay(latestComp.date)} (target zone: 50–60%).`,
-              sub: `Tracked via Renpho Body Water Percentage(%) & Body Water Mass(lb)`
-            });
-          }
+      const waterHistory = entries.filter(e => e && e.bodyWaterPct !== null && e.bodyWaterPct !== undefined && !isNaN(e.bodyWaterPct));
+      if (waterHistory.length > 0) {
+        const latest = waterHistory[waterHistory.length - 1];
+        const prev = waterHistory.length > 1 ? waterHistory[waterHistory.length - 2] : null;
+        const diff = prev ? (latest.bodyWaterPct - prev.bodyWaterPct) : 0; // positive = water % increased
+        const bwMassTxt = latest.bodyWaterMass !== null && latest.bodyWaterMass !== undefined ? ` (${latest.bodyWaterMass} lb)` : '';
+
+        if (diff >= MIN_MEANINGFUL_PCT_CHANGE) {
+          list.push({
+            tierClass: latest.bodyWaterPct >= 50 ? 'tier-150' : '',
+            badge: 'SURPRISE MILESTONE · BODY WATER % UP',
+            message: `Surprise hydration gain! Your % Body Water rose +${diff.toFixed(1)}% to ${latest.bodyWaterPct}%${bwMassTxt} on ${formatDateDisplay(latest.date)} (up from ${prev.bodyWaterPct}% on ${formatDateDisplay(prev.date)}).`,
+            sub: `Tracked via Renpho Body Water Percentage(%) & Body Water Mass(lb)`
+          });
+        } else if (!prev && latest.bodyWaterPct >= 50) {
+          list.push({
+            tierClass: '',
+            badge: 'SURPRISE MILESTONE · BODY WATER %',
+            message: `Surprise hydration milestone! Your % Body Water reading is ${latest.bodyWaterPct}%${bwMassTxt} on ${formatDateDisplay(latest.date)}, inside the 50–60% target zone.`,
+            sub: `Tracked via Renpho Body Water Percentage(%) & Body Water Mass(lb)`
+          });
         }
       }
 
@@ -2842,21 +2896,21 @@
         return;
       }
 
-      if (rawAmt !== '' && hasNonNumericCharacters(rawAmt, true)) {
-        alert(`Invalid amount ("${rawAmt}"): non-numeric characters or negative signs are not allowed. Please enter a number and try again.`);
+      if (rawAmt !== '' && hasInvalidFoodNumber(rawAmt)) {
+        alert(`Invalid amount ("${rawAmt}"): enter a non-negative number, decimal (e.g. 0.5), or fraction (e.g. 1/2).`);
         document.getElementById('portionUnitAmount').value = '';
         updatePortionCalculations(0);
         return;
       }
 
-      const amt = parseStrictNonNegativeNumber(rawAmt);
+      const amt = parseDecimalOrFraction(rawAmt);
       if (isNaN(amt)) {
         updatePortionCalculations(0);
         return;
       }
 
       if (unitType === 'grams') {
-        document.getElementById('portionGrams').value = String(amt);
+        document.getElementById('portionGrams').value = String(Math.round(amt * 100) / 100);
         calculatePortionFromGrams();
         return;
       }
@@ -2887,33 +2941,18 @@
     }
 
     function evaluateFraction(expr) {
-      try {
-        if (!expr) return 1;
-        if (expr.includes('-')) return NaN;
-        if (expr.includes('/')) {
-          let parts = expr.split('/');
-          if (parts.length !== 2) return NaN;
-          const num = Number(parts[0].trim());
-          const den = Number(parts[1].trim());
-          if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0 || num < 0 || den < 0) return NaN;
-          return num / den;
-        }
-        if (!/^\d+(\.\d+)?$/.test(expr)) return NaN;
-        return Number(expr);
-      } catch {
-        return NaN;
-      }
+      return parseDecimalOrFraction(expr);
     }
 
     function calculatePortionFromGrams() {
       const rawGrams = document.getElementById('portionGrams').value.trim();
-      if (rawGrams !== '' && hasNonNumericCharacters(rawGrams, true)) {
-        alert(`Invalid portion grams ("${rawGrams}"): non-numeric characters or negative signs are not allowed. Please enter a number and try again.`);
+      if (rawGrams !== '' && hasInvalidFoodNumber(rawGrams)) {
+        alert(`Invalid portion grams ("${rawGrams}"): enter a non-negative number, decimal (e.g. 125.5), or fraction (e.g. 1/2).`);
         document.getElementById('portionGrams').value = '';
         updatePortionCalculations(0);
         return;
       }
-      const grams = parseStrictNonNegativeNumber(rawGrams);
+      const grams = parseDecimalOrFraction(rawGrams);
       if (isNaN(grams) || grams > 10000) {
         updatePortionCalculations(0);
         return;
@@ -2921,7 +2960,7 @@
       const multiplier = grams / 100;
       document.getElementById('portionMultiplier').value = multiplier.toFixed(2);
       if (document.getElementById('portionUnitType').value === 'grams') {
-        document.getElementById('portionUnitAmount').value = String(grams);
+        document.getElementById('portionUnitAmount').value = String(Math.round(grams * 100) / 100);
       }
       updatePortionCalculations(multiplier);
     }
@@ -2930,7 +2969,7 @@
       const expr = document.getElementById('portionMultiplier').value.trim();
       const multiplier = evaluateFraction(expr);
       if (expr !== '' && (isNaN(multiplier) || multiplier < 0)) {
-        alert(`Invalid multiplier ("${expr}"): non-numeric characters or negative signs are not allowed. Please enter a positive number or fraction and try again.`);
+        alert(`Invalid multiplier ("${expr}"): enter a non-negative number, decimal (e.g. 0.5), or fraction (e.g. 1/2).`);
         document.getElementById('portionMultiplier').value = '1';
         document.getElementById('portionGrams').value = '100';
         updatePortionCalculations(1);
@@ -2941,8 +2980,8 @@
         updatePortionCalculations(0);
         return;
       }
-      const grams = Math.round(multiplier * 100);
-      document.getElementById('portionGrams').value = grams;
+      const grams = Math.round(multiplier * 1000) / 10;
+      document.getElementById('portionGrams').value = String(grams);
       if (document.getElementById('portionUnitType').value === 'multiplier') {
         document.getElementById('portionUnitAmount').value = expr;
       }
@@ -2952,7 +2991,7 @@
     function updatePortionCalculations(multiplier) {
       const sel = pendingFoodSelection;
       if (!sel) return;
-      const totalCals = Math.round(sel.calsPer100g * multiplier);
+      const totalCals = Math.round((sel.calsPer100g * multiplier) * 10) / 10;
       const totalP = Math.round((sel.pPer100g * multiplier) * 10) / 10;
       const totalF = Math.round((sel.fPer100g * multiplier) * 10) / 10;
       const totalC = Math.round((sel.cPer100g * multiplier) * 10) / 10;
@@ -2981,11 +3020,12 @@
       const mealType = document.getElementById('portionMealType').value || getDefaultMealTypeForMountainTime();
       const unitType = document.getElementById('portionUnitType').value;
       const rawAmt = document.getElementById('portionUnitAmount').value.trim();
+      const parsedAmt = parseDecimalOrFraction(rawAmt);
 
       let displayFoodName = pendingFoodSelection.name;
-      if (unitType === 'cups' && rawAmt) {
-        displayFoodName = `${pendingFoodSelection.name} (${rawAmt} cup${Number(rawAmt) === 1 ? '' : 's'})`;
-      } else if (unitType === 'tablespoons' && rawAmt) {
+      if (unitType === 'cups' && rawAmt && !isNaN(parsedAmt)) {
+        displayFoodName = `${pendingFoodSelection.name} (${rawAmt} cup${parsedAmt === 1 ? '' : 's'})`;
+      } else if (unitType === 'tablespoons' && rawAmt && !isNaN(parsedAmt)) {
         displayFoodName = `${pendingFoodSelection.name} (${rawAmt} tbsp)`;
       }
 
@@ -3432,7 +3472,7 @@
         todayFoodTableHtml = `<tr><td colspan="5" style="color: #775555;"><i>No food items logged for this date yet.</i></td></tr>`;
       }
 
-      document.getElementById('todayTotalCals').innerText = todayTotalCals;
+      document.getElementById('todayTotalCals').innerText = Math.round(todayTotalCals * 10) / 10;
       document.getElementById('todayFoodTableBody').innerHTML = todayFoodTableHtml;
 
       updateMacroPieChart(todayTotalP, todayTotalF, todayTotalC);
